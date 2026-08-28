@@ -338,3 +338,45 @@ async def test_rechaza_start_time_naive(patched):
             start=dt.datetime(2026, 9, 1, 10, 0),  # sin tzinfo
             now=local(0),
         )
+
+
+# --- busy_intervals: bloqueos traídos de Google Calendar --------------------
+#
+# Estos ejercitan `busy_intervals` de verdad (no lo monkeypatchean como el
+# resto del archivo vía el fixture `patched`), con una sesión falsa que sirve
+# los resultados de `session.scalars` en el mismo orden en que la función los
+# pide: turnos, ausencias, cierres de salón, bloqueos de Google.
+
+
+class _ScalarsSequenceSession:
+    def __init__(self, sequence):
+        self._sequence = list(sequence)
+
+    async def scalars(self, stmt):
+        return self._sequence.pop(0)
+
+
+@pytest.mark.asyncio
+async def test_busy_intervals_bloqueo_de_google_sin_staff_afecta_a_todos():
+    block = SimpleNamespace(staff_id=None, starts_at=local(10), ends_at=local(11))
+    session = _ScalarsSequenceSession([[], [], [], [block]])
+    window = Interval(local(0), local(23, 59))
+
+    busy = await availability.busy_intervals(session, [STAFF_A, STAFF_B], window, SALON_ID)
+
+    expected = Interval(block.starts_at, block.ends_at)
+    assert expected in busy[STAFF_A]
+    assert expected in busy[STAFF_B]
+
+
+@pytest.mark.asyncio
+async def test_busy_intervals_bloqueo_de_google_con_staff_afecta_solo_a_ese_profesional():
+    block = SimpleNamespace(staff_id=STAFF_A, starts_at=local(10), ends_at=local(11))
+    session = _ScalarsSequenceSession([[], [], [], [block]])
+    window = Interval(local(0), local(23, 59))
+
+    busy = await availability.busy_intervals(session, [STAFF_A, STAFF_B], window, SALON_ID)
+
+    expected = Interval(block.starts_at, block.ends_at)
+    assert expected in busy[STAFF_A]
+    assert expected not in busy[STAFF_B]

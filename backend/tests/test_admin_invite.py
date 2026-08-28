@@ -49,6 +49,7 @@ def make_profile(role: UserRole, salon_id: uuid.UUID = SALON_ID, **overrides):
         email="owner@example.com",
         phone=None,
         is_active=True,
+        color=None,
     )
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -133,6 +134,10 @@ class _FakeSession:
     async def get(self, model, id_):
         return self._profile if self._profile and self._profile.id == id_ else None
 
+    async def scalar(self, *args, **kwargs):
+        """`_next_staff_color` cuenta staff existente: 0 alcanza para el test."""
+        return 0
+
     async def commit(self):
         self.commit_calls += 1
 
@@ -163,6 +168,37 @@ async def test_invite_staff_asigna_el_rol_pedido(monkeypatch):
 
     assert result.role == UserRole.owner
     assert session.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_invite_staff_asigna_color_de_la_paleta_segun_orden(monkeypatch):
+    """La paleta rota según cuántos owner/staff ya existen en el salón —
+    debe coincidir con el backfill de la migración
+    20260827100000_google_calendar_and_staff_color.sql."""
+    user_id = uuid.uuid4()
+    profile = Profile(
+        id=user_id, salon_id=SALON_ID, role=UserRole.client, full_name="X", email="x@example.com"
+    )
+
+    async def fake_invite_user(email, full_name, salon_id):
+        return {"id": str(user_id)}
+
+    monkeypatch.setattr(supabase_admin, "invite_user", fake_invite_user)
+
+    class _CountingSession(_FakeSession):
+        def __init__(self, profile, existing_count):
+            super().__init__(profile)
+            self._existing_count = existing_count
+
+        async def scalar(self, *args, **kwargs):
+            return self._existing_count
+
+    session = _CountingSession(profile, existing_count=2)
+    data = StaffInviteCreate(email="x@example.com", full_name="X", role="staff")
+
+    result = await admin_service.invite_staff(session, SALON_ID, data)
+
+    assert result.color == admin_service._STAFF_COLOR_PALETTE[2]
 
 
 @pytest.mark.asyncio

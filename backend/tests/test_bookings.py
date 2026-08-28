@@ -191,6 +191,49 @@ async def test_crea_turno_con_staff_explicito(patched, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_google_calendar_caido_no_bloquea_la_creacion_del_turno(patched, monkeypatch):
+    """Contrato central de la integración: un problema con Google (token
+    vencido, API caída, lo que sea) nunca puede tumbar una reserva real. Se
+    fuerza la falla DENTRO del try/except de `google_calendar._push` (no
+    reemplazando `push_appointment_created` entero, que saltearía la
+    protección real y no probaría nada)."""
+    from app.core.config import get_settings
+    from app.services import google_calendar
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "google_client_id", "id")
+    monkeypatch.setattr(settings, "google_client_secret", "secret")
+    monkeypatch.setattr(settings, "google_calendar_token_key", "key")
+
+    async def boom(session, salon_id):
+        raise RuntimeError("Google Calendar está caído")
+
+    monkeypatch.setattr(google_calendar, "get_connection", boom)
+
+    async def eligible_staff_ids(session, service_id, only_staff_id=None):
+        return [only_staff_id] if only_staff_id else [STAFF_A]
+
+    async def assert_slot_bookable(session, **kwargs):
+        return Interval(START, END)
+
+    monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
+    monkeypatch.setattr(availability, "assert_slot_bookable", assert_slot_bookable)
+
+    session = FakeSession()
+    request = BookingRequest(
+        salon_id=SALON_ID,
+        service_id=SERVICE_ID,
+        start_time=START,
+        staff_id=STAFF_A,
+        guest_name="Julieta",
+    )
+    appointment = await bookings.create_booking(session, request, now=NOW)
+
+    assert appointment.status == AppointmentStatus.pending
+    assert session.commit_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_auto_confirm_deja_el_turno_confirmado(patched, monkeypatch):
     async def eligible_staff_ids(session, service_id, only_staff_id=None):
         return [STAFF_A]

@@ -117,6 +117,9 @@ class Profile(Base):
     email: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(Text)
+    #: Color hex (#RRGGBB) en el calendario admin. NULL para role=client. Se
+    #: asigna en app/services/admin.invite_staff por rotación de paleta.
+    color: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -277,7 +280,67 @@ class Appointment(Base):
     deposit_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     mp_preference_id: Mapped[str | None] = mapped_column(Text)
     mp_payment_id: Mapped[str | None] = mapped_column(Text)
+    #: id del evento en Google Calendar si se pudo empujar (push best-effort,
+    #: ver app/services/google_calendar.py). NULL si Google no está conectado
+    #: o el push falló.
+    google_event_id: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class GoogleCalendarConnection(Base):
+    """Conexión OAuth única por salón a una cuenta de Google compartida (no
+    una por profesional). `salon_id` es la PK: eso mismo impone que exista a
+    lo sumo una fila por salón. Sin access_token/expires_at a propósito: el
+    access token se vuelve a pedir con el refresh_token en cada uso, ver
+    app/services/google_calendar.py."""
+
+    __tablename__ = "google_calendar_connections"
+
+    salon_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("salons.id"), primary_key=True
+    )
+    calendar_id: Mapped[str] = mapped_column(Text, default="primary")
+    #: Cifrado con Fernet (settings.google_calendar_token_key) antes de
+    #: guardar — nunca en texto plano.
+    refresh_token_encrypted: Mapped[str] = mapped_column(Text)
+    connected_by: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    connected_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_synced_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class GoogleCalendarBlock(Base):
+    """Eventos creados directamente en el Google Calendar conectado (no por
+    esta app), sincronizados on-demand y tratados como agenda ocupada por el
+    motor de disponibilidad (ver app/services/availability.busy_intervals).
+    `staff_id` NULL bloquea todo el salón (como SalonClosure); con valor
+    bloquea solo a ese profesional — se infiere de un tag opcional "[Nombre]"
+    al inicio del título del evento en Google."""
+
+    __tablename__ = "google_calendar_blocks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    salon_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True))
+    google_event_id: Mapped[str] = mapped_column(Text)
+    staff_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
+    summary: Mapped[str | None] = mapped_column(Text)
+    starts_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

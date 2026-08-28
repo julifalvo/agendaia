@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiGet, apiPatch, apiPost, ApiError } from "../lib/api";
+import { apiGet, ApiError } from "../lib/api";
+import {
+  cancelBooking as cancelBookingAction,
+  rescheduleBooking,
+  setBookingPaymentStatus,
+  transitionBooking,
+} from "./bookingActions";
 import type { ApiBooking, ApiPublicStaff, ApiService, ApiStaff, PaymentStatus } from "../types/api";
 import type { AppointmentStatus } from "../types/booking";
 
@@ -97,7 +103,7 @@ export function AdminDashboard() {
   async function transition(id: string, status: AppointmentStatus) {
     setBusyId(id);
     try {
-      await apiPatch(`/bookings/${id}/status`, { status });
+      await transitionBooking(id, status);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar el turno");
@@ -109,7 +115,7 @@ export function AdminDashboard() {
   async function cancel(id: string) {
     setBusyId(id);
     try {
-      await apiPost(`/bookings/${id}/cancel`, {});
+      await cancelBookingAction(id);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo cancelar el turno");
@@ -121,7 +127,7 @@ export function AdminDashboard() {
   async function setPaymentStatus(id: string, paymentStatus: PaymentStatus) {
     setBusyId(id);
     try {
-      await apiPatch(`/bookings/${id}/payment-status`, { payment_status: paymentStatus });
+      await setBookingPaymentStatus(id, paymentStatus);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar la seña");
@@ -149,10 +155,7 @@ export function AdminDashboard() {
     setError(null);
     try {
       const startTime = new Date(`${editForm.date}T${editForm.time}:00`).toISOString();
-      await apiPost(`/bookings/${id}/reschedule`, {
-        start_time: startTime,
-        staff_id: editForm.staffId,
-      });
+      await rescheduleBooking(id, startTime, editForm.staffId);
       setEditingId(null);
       await load();
     } catch (err) {

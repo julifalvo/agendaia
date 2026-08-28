@@ -373,6 +373,156 @@ def test_owner_puede_confirmar_turnos(client, monkeypatch):
     assert res.json()["status"] == "confirmed"
 
 
+# --- autorización: un staff no puede tocar turnos de otro profesional --------
+#
+# `_authorize_mutation` (routes/bookings.py) restringe las 4 rutas que mutan
+# un turno existente: un staff (no owner) solo puede tocar lo suyo. El owner
+# sigue sin restricciones — se verifica con un caso de regresión.
+
+
+def test_staff_no_puede_cancelar_turno_de_otro_staff(client, monkeypatch):
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+
+    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
+
+
+def test_staff_no_puede_reprogramar_turno_de_otro_staff(client, monkeypatch):
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+
+    res = client.post(
+        f"/api/v1/bookings/{appt.id}/reschedule",
+        json={"start_time": START.isoformat()},
+    )
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
+
+
+def test_staff_no_puede_cambiar_estado_de_turno_de_otro_staff(client, monkeypatch):
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+
+    res = client.patch(
+        f"/api/v1/bookings/{appt.id}/status", json={"status": "confirmed"}
+    )
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
+
+
+def test_staff_no_puede_cambiar_pago_de_turno_de_otro_staff(client, monkeypatch):
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+
+    res = client.patch(
+        f"/api/v1/bookings/{appt.id}/payment-status", json={"payment_status": "paid"}
+    )
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
+
+
+def test_staff_puede_cancelar_su_propio_turno(client, monkeypatch):
+    """Regresión: la restricción nueva no debe bloquear a un staff sobre sus
+    propios turnos."""
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=profile.id)
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    async def fake_cancel(session, appointment_id, reason=None):
+        return make_appointment(
+            salon_id=SALON_ID, staff_id=profile.id, status=AppointmentStatus.cancelled
+        )
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+    monkeypatch.setattr(bookings_service, "cancel_booking", fake_cancel)
+
+    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    assert res.status_code == 200
+
+
+def test_owner_puede_cancelar_turno_de_cualquier_staff(client, monkeypatch):
+    """Regresión: el owner sigue sin restricciones dentro de su salón."""
+    profile = make_profile(UserRole.owner, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    async def fake_cancel(session, appointment_id, reason=None):
+        return make_appointment(salon_id=SALON_ID, status=AppointmentStatus.cancelled)
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+    monkeypatch.setattr(bookings_service, "cancel_booking", fake_cancel)
+
+    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    assert res.status_code == 200
+
+
+# --- administración: color de staff -------------------------------------------
+
+
+def test_staff_no_puede_cambiar_color_de_staff(client):
+    as_profile(make_profile(UserRole.staff, salon_id=SALON_ID))
+    res = client.patch(
+        f"/api/v1/staff/{uuid.uuid4()}/color", json={"color": "#AABBCC"}
+    )
+    assert res.status_code == 403
+
+
+def test_owner_puede_cambiar_color_de_staff(client, monkeypatch):
+    profile = make_profile(UserRole.owner, salon_id=SALON_ID)
+    as_profile(profile)
+    target_id = uuid.uuid4()
+
+    async def fake_set_color(session, salon_id, staff_id, color):
+        assert salon_id == profile.salon_id
+        assert staff_id == target_id
+        assert color == "#AABBCC"
+        return make_profile(UserRole.staff, salon_id=SALON_ID, id=target_id, color=color)
+
+    monkeypatch.setattr(admin_service, "set_staff_color", fake_set_color)
+
+    res = client.patch(f"/api/v1/staff/{target_id}/color", json={"color": "#AABBCC"})
+    assert res.status_code == 200
+    assert res.json()["color"] == "#AABBCC"
+
+
+def test_color_invalido_es_422(client):
+    as_profile(make_profile(UserRole.owner, salon_id=SALON_ID))
+    res = client.patch(f"/api/v1/staff/{uuid.uuid4()}/color", json={"color": "not-a-color"})
+    assert res.status_code == 422
+
+
 # --- administración: servicios ------------------------------------------------
 
 

@@ -39,6 +39,18 @@ class Settings(BaseSettings):
     #: más seguido que un dominio propio verificado.
     resend_from_email: str = "onboarding@resend.dev"
 
+    # Google Calendar (OAuth) — sync bidireccional del calendario del salón,
+    # una sola cuenta de Google por salón (no una por profesional). Vacío =
+    # feature deshabilitada, mismo criterio que Mercado Pago/Resend.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = (
+        "http://localhost:8000/api/v1/admin/google-calendar/callback"
+    )
+    #: Clave Fernet (`Fernet.generate_key()`, 32 bytes url-safe base64) para
+    #: cifrar el refresh_token antes de guardarlo. Vacía = feature deshabilitada.
+    google_calendar_token_key: str = ""
+
     db_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]
 

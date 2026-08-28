@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -136,6 +136,26 @@ async def delete_service_permanently(
 
 # --- Staff ---------------------------------------------------------------
 
+#: Paleta de colores para diferenciar profesionales en el calendario admin.
+#: Debe coincidir con la paleta de backfill en la migración
+#: 20260827100000_google_calendar_and_staff_color.sql — viven duplicadas a
+#: propósito (SQL vs. Python no comparten código), pero conceptualmente hay
+#: una sola paleta.
+_STAFF_COLOR_PALETTE = [
+    "#F2B8C6", "#B8C6F2", "#C6F2B8", "#F2E1B8",
+    "#B8F2E1", "#E1B8F2", "#F2B8E1", "#C6B8F2",
+]
+
+
+async def _next_staff_color(session: AsyncSession, salon_id: uuid.UUID) -> str:
+    """Rota la paleta según la cantidad de staff ya existente en el salón."""
+    count = await session.scalar(
+        select(func.count()).select_from(Profile).where(
+            Profile.salon_id == salon_id, Profile.role.in_(_STAFF_ROLES)
+        )
+    )
+    return _STAFF_COLOR_PALETTE[(count or 0) % len(_STAFF_COLOR_PALETTE)]
+
 
 async def invite_staff(
     session: AsyncSession, salon_id: uuid.UUID, data: StaffInviteCreate
@@ -162,6 +182,7 @@ async def invite_staff(
         )
 
     profile.role = UserRole(data.role)
+    profile.color = await _next_staff_color(session, salon_id)
     await session.commit()
     await session.refresh(profile)
     return profile
@@ -214,6 +235,16 @@ async def set_staff_active(
 ) -> Profile:
     profile = await load_staff_profile(session, salon_id, staff_id)
     profile.is_active = is_active
+    await session.commit()
+    await session.refresh(profile)
+    return profile
+
+
+async def set_staff_color(
+    session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID, color: str
+) -> Profile:
+    profile = await load_staff_profile(session, salon_id, staff_id)
+    profile.color = color
     await session.commit()
     await session.refresh(profile)
     return profile

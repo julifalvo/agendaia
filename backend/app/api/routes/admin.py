@@ -27,6 +27,7 @@ from app.schemas.admin import (
     ServiceOut,
     ServiceUpdate,
     StaffActiveUpdate,
+    StaffColorUpdate,
     StaffInviteCreate,
     StaffOut,
     StaffServicesUpdate,
@@ -43,6 +44,16 @@ def _require_self_or_owner(profile: Profile, staff_id: uuid.UUID) -> None:
         raise PermissionDenied(
             "Solo el propio profesional o el dueño del salón pueden hacer esto"
         )
+
+
+def _require_salon_staff(profile: Profile) -> None:
+    """Lectura de horario/ausencias de cualquier profesional del salón: la
+    grilla de calendario compartida necesita que un staff vea las columnas de
+    sus compañeros (horario laboral, ausencias), no solo la propia. Las
+    mutaciones siguen restringidas a `_require_self_or_owner`; esto es
+    exclusivamente para los GET."""
+    if profile.role not in (UserRole.owner, UserRole.staff):
+        raise PermissionDenied("Solo el staff o el dueño del salón pueden ver esto")
 
 
 # --- Services ----------------------------------------------------------------
@@ -172,6 +183,19 @@ async def set_staff_active(
     return StaffOut.model_validate(updated)
 
 
+@router.patch("/staff/{staff_id}/color", response_model=StaffOut)
+async def set_staff_color(
+    staff_id: uuid.UUID,
+    payload: StaffColorUpdate,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> StaffOut:
+    updated = await admin.set_staff_color(
+        session, profile.salon_id, staff_id, payload.color
+    )
+    return StaffOut.model_validate(updated)
+
+
 @router.delete("/staff/{staff_id}/permanent", status_code=204)
 async def delete_staff_permanently(
     staff_id: uuid.UUID,
@@ -208,7 +232,7 @@ async def get_staff_schedule(
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> list[ScheduleBlockOut]:
-    _require_self_or_owner(profile, staff_id)
+    _require_salon_staff(profile)
     rows = await admin.get_staff_schedule(
         session, profile.salon_id, staff_id, date_from, date_to
     )
@@ -244,7 +268,7 @@ async def list_time_off(
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> list[TimeOffOut]:
-    _require_self_or_owner(profile, staff_id)
+    _require_salon_staff(profile)
     rows = await admin.list_time_off(
         session, profile.salon_id, staff_id, date_from, date_to
     )

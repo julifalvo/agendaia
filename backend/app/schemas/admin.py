@@ -61,10 +61,15 @@ class StaffOut(BaseModel):
     phone: str | None
     role: UserRole
     is_active: bool
+    color: str | None
 
 
 class StaffActiveUpdate(BaseModel):
     is_active: bool
+
+
+class StaffColorUpdate(BaseModel):
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
 
 
 class PublicStaffOut(BaseModel):

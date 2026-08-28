@@ -5,6 +5,7 @@ import { LoginPanel } from "../components/LoginPanel";
 
 const NAV_LINKS = [
   { to: "/admin", label: "Agenda", end: true },
+  { to: "/admin/calendar", label: "Calendario" },
   { to: "/admin/services", label: "Servicios" },
   { to: "/admin/staff", label: "Staff" },
   { to: "/admin/closures", label: "Bloquear agenda" },

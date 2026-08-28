@@ -30,6 +30,7 @@ from app.core.errors import (
 from app.db.models import (
     ACTIVE_STATUSES,
     Appointment,
+    GoogleCalendarBlock,
     Profile,
     Salon,
     SalonClosure,
@@ -200,6 +201,23 @@ async def busy_intervals(
     ]
     for sid in staff_ids:
         busy[sid].extend(closures)
+
+    # Bloqueos traídos de Google Calendar (sync on-demand, ver
+    # app/services/google_calendar.py): staff_id NULL bloquea a todos los
+    # profesionales por igual (como SalonClosure); con valor bloquea solo a
+    # ese profesional.
+    google_block_stmt = select(GoogleCalendarBlock).where(
+        GoogleCalendarBlock.salon_id == salon_id,
+        GoogleCalendarBlock.starts_at < window.end,
+        GoogleCalendarBlock.ends_at > window.start,
+    )
+    for block in await session.scalars(google_block_stmt):
+        interval = Interval(block.starts_at, block.ends_at)
+        if block.staff_id is None:
+            for sid in staff_ids:
+                busy[sid].append(interval)
+        elif block.staff_id in busy:
+            busy[block.staff_id].append(interval)
 
     for intervals in busy.values():
         intervals.sort(key=lambda i: i.start)

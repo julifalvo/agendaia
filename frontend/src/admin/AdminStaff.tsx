@@ -56,6 +56,18 @@ export function AdminStaff() {
     void load();
   }, []);
 
+  async function changeColor(member: ApiStaff, color: string) {
+    setBusyId(member.id);
+    try {
+      const updated = await apiPatch<ApiStaff>(`/staff/${member.id}/color`, { color });
+      setStaff((prev) => prev.map((s) => (s.id === member.id ? updated : s)));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo actualizar el color");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function toggleActive(member: ApiStaff) {
     setBusyId(member.id);
     try {
@@ -211,6 +223,14 @@ export function AdminStaff() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  aria-label={`Color de ${member.full_name} en el calendario`}
+                  value={member.color ?? "#cccccc"}
+                  disabled={busyId === member.id}
+                  onChange={(e) => void changeColor(member, e.target.value)}
+                  className="h-8 w-8 cursor-pointer rounded-full border border-charcoal/15 bg-white p-0.5 disabled:opacity-50"
+                />
                 <Link
                   to={`/admin/staff/${member.id}/schedule`}
                   className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40"

@@ -46,7 +46,7 @@ from app.db.models import (
     Salon,
     Service,
 )
-from app.services import availability, email, notifications, payments
+from app.services import availability, email, google_calendar, notifications, payments
 from app.services.availability import SlotTakenLocally
 from app.services.payments import MercadoPagoNotConfigured
 
@@ -287,6 +287,7 @@ async def create_booking(
     await session.refresh(appointment)
     await notifications.notify("booking.created", appointment)
     await email.send_booking_confirmation(appointment, service.name)
+    await google_calendar.push_appointment_created(session, appointment, service.name)
     await attach_client_name(session, appointment)
 
     # `mp_init_point` no es una columna: es la URL de checkout que el
@@ -441,6 +442,10 @@ async def transition_status(
     await notifications.notify(
         _STATUS_EVENTS[new_status], appointment, reason=reason
     )
+    if new_status is AppointmentStatus.cancelled:
+        # completed/no_show no tocan el calendario: el evento ya pasó, no hay
+        # nada que sincronizar.
+        await google_calendar.push_appointment_cancelled(session, appointment)
     return appointment
 
 
@@ -601,6 +606,7 @@ async def reschedule_booking(
     await notifications.notify(
         "booking.rescheduled", appointment, previous_start=previous_start.isoformat()
     )
+    await google_calendar.push_appointment_updated(session, appointment, service.name)
     return appointment
 
 

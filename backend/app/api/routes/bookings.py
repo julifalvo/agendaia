@@ -43,6 +43,24 @@ def _authorize_access(profile: Profile, appointment: Appointment) -> None:
     raise ResourceNotFound("Turno inexistente", appointment_id=str(appointment.id))
 
 
+def _authorize_mutation(profile: Profile, appointment: Appointment) -> None:
+    """Como `_authorize_access`, pero además exige que un staff (no owner) sea
+    el profesional asignado para poder modificar el turno.
+
+    El owner tiene el mismo alcance que antes (todo el salón); un staff ahora
+    solo puede cancelar/reprogramar/cambiar estado o seña de sus propios
+    turnos, no los de otro profesional. Se usa solo en las rutas que mutan un
+    turno existente — la lectura (`get_booking`, `list_bookings`) sigue
+    salón-completo para staff, porque la agenda compartida necesita que vean
+    todas las columnas.
+    """
+    _authorize_access(profile, appointment)
+    if profile.role is UserRole.staff and appointment.staff_id != profile.id:
+        raise PermissionDenied(
+            "Solo el profesional asignado o el dueño del salón pueden modificar este turno"
+        )
+
+
 @router.get("/availability", response_model=AvailabilityOut)
 async def check_availability(
     salon_id: uuid.UUID,
@@ -218,7 +236,7 @@ async def cancel_booking(
     session: AsyncSession = Depends(get_session),
 ) -> BookingOut:
     appointment = await bookings.get_booking(session, appointment_id)
-    _authorize_access(profile, appointment)
+    _authorize_mutation(profile, appointment)
     updated = await bookings.cancel_booking(
         session, appointment_id, reason=payload.reason
     )
@@ -234,7 +252,7 @@ async def update_status(
 ) -> BookingOut:
     """Confirmar / completar / marcar ausente. Reservado al salón (no al cliente)."""
     appointment = await bookings.get_booking(session, appointment_id)
-    _authorize_access(profile, appointment)
+    _authorize_mutation(profile, appointment)
     updated = await bookings.transition_status(
         session, appointment_id, payload.status, reason=payload.reason
     )
@@ -253,7 +271,7 @@ async def update_payment_status(
     hay forma automática de saberlo, alguien lo tiene que chequear contra el
     resumen bancario."""
     appointment = await bookings.get_booking(session, appointment_id)
-    _authorize_access(profile, appointment)
+    _authorize_mutation(profile, appointment)
     updated = await bookings.set_payment_status(
         session, appointment_id, payload.payment_status
     )
@@ -268,7 +286,7 @@ async def reschedule_booking(
     session: AsyncSession = Depends(get_session),
 ) -> BookingOut:
     appointment = await bookings.get_booking(session, appointment_id)
-    _authorize_access(profile, appointment)
+    _authorize_mutation(profile, appointment)
     updated = await bookings.reschedule_booking(
         session,
         appointment_id,

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes import admin as admin_routes
 from app.api.routes import bookings as bookings_routes
+from app.api.routes import google_calendar as google_calendar_routes
 from app.api.routes import me as me_routes
 from app.api.routes import webhooks as webhooks_routes
 from app.core.config import get_settings
@@ -69,5 +70,6 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
 
 app.include_router(bookings_routes.router, prefix="/api/v1")
 app.include_router(admin_routes.router, prefix="/api/v1")
+app.include_router(google_calendar_routes.router, prefix="/api/v1")
 app.include_router(me_routes.router, prefix="/api/v1")
 app.include_router(webhooks_routes.router, prefix="/api/v1")

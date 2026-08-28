@@ -4,6 +4,7 @@ import { ProfileProvider } from "./hooks/useProfile";
 import { PublicSite } from "./pages/PublicSite";
 import { AdminLayout } from "./admin/AdminLayout";
 import { AdminDashboard } from "./admin/AdminDashboard";
+import { AdminCalendar } from "./admin/AdminCalendar";
 import { AdminServices } from "./admin/AdminServices";
 import { AdminStaff } from "./admin/AdminStaff";
 import { AdminSchedule } from "./admin/AdminSchedule";
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/" element={<PublicSite />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
+            <Route path="calendar" element={<AdminCalendar />} />
             <Route path="services" element={<AdminServices />} />
             <Route path="staff" element={<AdminStaff />} />
             <Route path="staff/:staffId/schedule" element={<AdminSchedule />} />

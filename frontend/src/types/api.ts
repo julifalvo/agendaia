@@ -92,6 +92,7 @@ export interface ApiStaff {
   phone: string | null;
   role: "owner" | "staff" | "client";
   is_active: boolean;
+  color: string | null;
 }
 
 export interface ServiceInput {
@@ -151,4 +152,32 @@ export interface ApiTimeOff {
   starts_at: string;
   ends_at: string;
   reason: string | null;
+}
+
+// --- Google Calendar ------------------------------------------------------
+
+export interface ApiGoogleCalendarStatus {
+  connected: boolean;
+  calendar_id: string | null;
+  connected_at: string | null;
+  last_synced_at: string | null;
+}
+
+export interface ApiGoogleCalendarConnect {
+  authorization_url: string;
+}
+
+export interface ApiGoogleCalendarSyncResult {
+  connected: boolean;
+  upserted: number;
+  pruned: number;
+  error: string | null;
+}
+
+export interface ApiGoogleCalendarBlock {
+  id: string;
+  staff_id: string | null;
+  summary: string | null;
+  starts_at: string;
+  ends_at: string;
 }
