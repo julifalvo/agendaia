@@ -208,6 +208,15 @@ async def delete_staff_permanently(
     await admin.delete_staff_permanently(session, profile.salon_id, staff_id)
 
 
+@router.get("/staff/{staff_id}/services", response_model=list[uuid.UUID])
+async def get_staff_services(
+    staff_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(UserRole.owner, UserRole.staff)),
+    session: AsyncSession = Depends(get_session),
+) -> list[uuid.UUID]:
+    return await admin.get_staff_services(session, profile.salon_id, staff_id)
+
+
 @router.put("/staff/{staff_id}/services", response_model=list[uuid.UUID])
 async def set_staff_services(
     staff_id: uuid.UUID,

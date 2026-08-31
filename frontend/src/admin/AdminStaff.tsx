@@ -29,22 +29,13 @@ export function AdminStaff() {
       setStaff(staffRows);
       setServices(serviceRows);
 
-      // No hay un GET /staff/{id}/services: se arma el mapa invirtiendo
-      // GET /services/{id}/staff (público) para cada servicio del salón.
-      const assignments: Record<string, Set<string>> = {};
-      for (const member of staffRows) assignments[member.id] = new Set();
-
-      await Promise.all(
-        serviceRows.map(async (service) => {
-          const providers = await apiGet<{ id: string; full_name: string }[]>(
-            `/services/${service.id}/staff`,
-          );
-          for (const provider of providers) {
-            assignments[provider.id]?.add(service.id);
-          }
+      const assignmentEntries = await Promise.all(
+        staffRows.map(async (member) => {
+          const serviceIds = await apiGet<string[]>(`/staff/${member.id}/services`);
+          return [member.id, new Set(serviceIds)] as const;
         }),
       );
-      setAssigned(assignments);
+      setAssigned(Object.fromEntries(assignmentEntries));
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo cargar el staff");
     } finally {

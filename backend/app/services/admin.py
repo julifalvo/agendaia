@@ -279,6 +279,20 @@ async def delete_staff_permanently(
     session.expire(profile)
 
 
+async def get_staff_services(
+    session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """Servicios asignados a un profesional, para precargar el checklist en
+    el admin. A diferencia de `list_public_staff_for_service` no depende de
+    que el servicio esté activo — si no, una asignación a un servicio dado
+    de baja desaparecería del checklist sin haberse desasignado."""
+    await load_staff_profile(session, salon_id, staff_id)
+    rows = await session.scalars(
+        select(StaffService.service_id).where(StaffService.staff_id == staff_id)
+    )
+    return list(rows)
+
+
 async def set_staff_services(
     session: AsyncSession,
     salon_id: uuid.UUID,
