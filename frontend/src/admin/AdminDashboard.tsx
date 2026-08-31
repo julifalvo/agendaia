@@ -1,70 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, ApiError } from "../lib/api";
-import {
-  cancelBooking as cancelBookingAction,
-  rescheduleBooking,
-  setBookingPaymentStatus,
-  transitionBooking,
-} from "./bookingActions";
-import type { ApiBooking, ApiPublicStaff, ApiService, ApiStaff, PaymentStatus } from "../types/api";
+import { cancelBooking as cancelBookingAction, setBookingPaymentStatus, transitionBooking } from "./bookingActions";
+import { BookingEditModal } from "./BookingEditModal";
+import { PAYMENT_LABEL, PAYMENT_STYLE, STATUS_LABEL, STATUS_STYLE, todayISODate } from "./bookingLabels";
+import type { ApiBooking, ApiService, ApiStaff, PaymentStatus } from "../types/api";
 import type { AppointmentStatus } from "../types/booking";
-
-function toLocalDateInput(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function toLocalTimeInput(iso: string): string {
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
 
 const timeFormatter = new Intl.DateTimeFormat("es-AR", { hour: "2-digit", minute: "2-digit" });
 const currencyFormatter = (currency: string) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency });
 
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmado",
-  completed: "Completado",
-  cancelled: "Cancelado",
-  no_show: "No asistió",
-};
-
-const STATUS_STYLE: Record<AppointmentStatus, string> = {
-  pending: "bg-baby-pink/40 text-charcoal",
-  confirmed: "bg-champagne/15 text-champagne",
-  completed: "bg-charcoal/10 text-charcoal/70",
-  cancelled: "bg-charcoal/5 text-charcoal/40 line-through",
-  no_show: "bg-charcoal/5 text-charcoal/40",
-};
-
-const PAYMENT_LABEL: Record<PaymentStatus, string> = {
-  unpaid: "Sin seña",
-  pending: "Seña sin confirmar",
-  paid: "Seña recibida",
-};
-
-const PAYMENT_STYLE: Record<PaymentStatus, string> = {
-  unpaid: "bg-charcoal/5 text-charcoal/40",
-  pending: "bg-red-50 text-red-600",
-  paid: "bg-green-50 text-green-700",
-};
-
-function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
 export function AdminDashboard() {
   const [date, setDate] = useState(todayISODate());
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [services, setServices] = useState<Record<string, ApiService>>({});
-  const [staff, setStaff] = useState<Record<string, ApiStaff | ApiPublicStaff>>({});
+  const [staff, setStaff] = useState<Record<string, ApiStaff>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ date: "", time: "", staffId: "" });
+  const [editingBooking, setEditingBooking] = useState<ApiBooking | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,35 +85,6 @@ export function AdminDashboard() {
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo actualizar la seña");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  function startEdit(booking: ApiBooking) {
-    setEditingId(booking.id);
-    setEditForm({
-      date: toLocalDateInput(booking.start_time),
-      time: toLocalTimeInput(booking.start_time),
-      staffId: booking.staff_id,
-    });
-  }
-
-  function cancelEdit() {
-    setEditingId(null);
-  }
-
-  async function saveReschedule(id: string) {
-    if (!editForm.date || !editForm.time) return;
-    setBusyId(id);
-    setError(null);
-    try {
-      const startTime = new Date(`${editForm.date}T${editForm.time}:00`).toISOString();
-      await rescheduleBooking(id, startTime, editForm.staffId);
-      setEditingId(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo reprogramar el turno");
     } finally {
       setBusyId(null);
     }
@@ -280,10 +205,10 @@ export function AdminDashboard() {
                     <button
                       type="button"
                       disabled={isBusy}
-                      onClick={() => (editingId === booking.id ? cancelEdit() : startEdit(booking))}
+                      onClick={() => setEditingBooking(booking)}
                       className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                     >
-                      {editingId === booking.id ? "Cerrar edición" : "Editar horario"}
+                      Editar horario
                     </button>
                     <button
                       type="button"
@@ -296,55 +221,19 @@ export function AdminDashboard() {
                   </>
                 )}
               </div>
-
-              {editingId === booking.id && (
-                <div className="flex w-full flex-wrap items-end gap-3 rounded-xl border border-champagne/30 bg-champagne/5 p-3">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-charcoal/60">Fecha</label>
-                    <input
-                      type="date"
-                      value={editForm.date}
-                      onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
-                      className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-charcoal/60">Hora</label>
-                    <input
-                      type="time"
-                      value={editForm.time}
-                      onChange={(e) => setEditForm((f) => ({ ...f, time: e.target.value }))}
-                      className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs text-charcoal/60">Profesional</label>
-                    <select
-                      value={editForm.staffId}
-                      onChange={(e) => setEditForm((f) => ({ ...f, staffId: e.target.value }))}
-                      className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
-                    >
-                      {Object.values(staff).map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.full_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void saveReschedule(booking.id)}
-                    className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  >
-                    {isBusy ? "Guardando..." : "Guardar cambio"}
-                  </button>
-                </div>
-              )}
             </article>
           );
         })}
       </div>
+
+      {editingBooking && (
+        <BookingEditModal
+          booking={editingBooking}
+          staffOptions={Object.values(staff)}
+          onClose={() => setEditingBooking(null)}
+          onChanged={load}
+        />
+      )}
     </div>
   );
 }

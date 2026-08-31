@@ -1,13 +1,10 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
 import { useProfile } from "../hooks/useProfileContext";
-import {
-  cancelBooking,
-  rescheduleBooking,
-  setBookingPaymentStatus,
-  transitionBooking,
-} from "./bookingActions";
+import { rescheduleBooking } from "./bookingActions";
+import { BookingEditModal } from "./BookingEditModal";
+import { todayISODate } from "./bookingLabels";
 import type {
   ApiBooking,
   ApiGoogleCalendarBlock,
@@ -18,7 +15,6 @@ import type {
   ApiService,
   ApiStaff,
 } from "../types/api";
-import type { AppointmentStatus } from "../types/booking";
 
 // --- Grilla: un día, 08:00–21:00 en bloques de 30' -------------------------
 
@@ -29,18 +25,6 @@ const PX_PER_MIN = 1.2;
 const SLOT_COUNT = (DAY_END_MIN - DAY_START_MIN) / SLOT_MIN;
 const ROW_PX = SLOT_MIN * PX_PER_MIN;
 const GRID_HEIGHT_PX = SLOT_COUNT * ROW_PX;
-
-const STATUS_LABEL: Record<AppointmentStatus, string> = {
-  pending: "Pendiente",
-  confirmed: "Confirmado",
-  completed: "Completado",
-  cancelled: "Cancelado",
-  no_show: "No asistió",
-};
-
-function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function addDaysISO(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
@@ -80,12 +64,6 @@ interface CreateForm {
   guestPhone: string;
 }
 
-interface EditForm {
-  date: string;
-  time: string;
-  staffId: string;
-}
-
 export function AdminCalendar() {
   const { profile } = useProfile();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,10 +83,15 @@ export function AdminCalendar() {
 
   const [createSlot, setCreateSlot] = useState<CreateForm | null>(null);
   const [editingBooking, setEditingBooking] = useState<ApiBooking | null>(null);
-  const [editForm, setEditForm] = useState<EditForm>({ date: "", time: "", staffId: "" });
+  const [dragOverStaffId, setDragOverStaffId] = useState<string | null>(null);
 
   const isOwner = profile?.role === "owner";
   const activeStaff = useMemo(() => staff.filter((s) => s.is_active), [staff]);
+  const manageableStaff = useMemo(
+    () => activeStaff.filter((s) => canManage(s.id)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeStaff, isOwner, profile?.id],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -230,6 +213,17 @@ export function AdminCalendar() {
     });
   }
 
+  function openCreateGlobal() {
+    if (manageableStaff.length === 0) return;
+    setCreateSlot({
+      staffId: manageableStaff[0].id,
+      serviceId: services[0]?.id ?? "",
+      time: minutesToTimeLabel(DAY_START_MIN),
+      guestName: "",
+      guestPhone: "",
+    });
+  }
+
   async function submitCreate(event: FormEvent) {
     event.preventDefault();
     if (!createSlot || !profile) return;
@@ -257,68 +251,37 @@ export function AdminCalendar() {
   function openEdit(booking: ApiBooking) {
     if (!canManage(booking.staff_id)) return;
     setEditingBooking(booking);
-    const start = new Date(booking.start_time);
-    setEditForm({
-      date: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`,
-      time: `${String(start.getHours()).padStart(2, "0")}:${String(start.getMinutes()).padStart(2, "0")}`,
-      staffId: booking.staff_id,
-    });
   }
 
-  async function handleTransition(status: AppointmentStatus) {
-    if (!editingBooking) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await transitionBooking(editingBooking.id, status);
-      setEditingBooking(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo actualizar el turno");
-    } finally {
-      setBusy(false);
+  function handleDragStart(event: DragEvent<HTMLButtonElement>, booking: ApiBooking) {
+    if (!canManage(booking.staff_id)) {
+      event.preventDefault();
+      return;
     }
+    event.dataTransfer.setData("text/plain", booking.id);
+    event.dataTransfer.effectAllowed = "move";
   }
 
-  async function handleCancel() {
-    if (!editingBooking) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await cancelBooking(editingBooking.id);
-      setEditingBooking(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo cancelar el turno");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handlePayment(paid: boolean) {
-    if (!editingBooking) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await setBookingPaymentStatus(editingBooking.id, paid ? "paid" : "pending");
-      setEditingBooking(null);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "No se pudo actualizar la seña");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleReschedule(event: FormEvent) {
+  async function handleDrop(event: DragEvent<HTMLDivElement>, staffId: string) {
     event.preventDefault();
-    if (!editingBooking) return;
+    setDragOverStaffId(null);
+    if (!canManage(staffId)) return;
+    const bookingId = event.dataTransfer.getData("text/plain");
+    const booking = bookings.find((b) => b.id === bookingId);
+    if (!booking || !canManage(booking.staff_id)) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const rawMinutes = DAY_START_MIN + (event.clientY - rect.top) / PX_PER_MIN;
+    const snapped = Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN;
+    const slotIndex = (snapped - DAY_START_MIN) / SLOT_MIN;
+    if (slotIndex < 0 || slotIndex >= SLOT_COUNT || !isWorking(staffId, slotIndex)) return;
+    if (snapped === localMinutesSinceMidnight(booking.start_time) && staffId === booking.staff_id) return;
+
     setBusy(true);
     setError(null);
     try {
-      const startTime = new Date(`${editForm.date}T${editForm.time}:00`).toISOString();
-      await rescheduleBooking(editingBooking.id, startTime, editForm.staffId);
-      setEditingBooking(null);
+      const startTime = new Date(`${date}T${minutesToTimeLabel(snapped)}:00`).toISOString();
+      await rescheduleBooking(booking.id, startTime, staffId);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo reprogramar el turno");
@@ -384,7 +347,15 @@ export function AdminCalendar() {
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-2xl text-charcoal">Calendario</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={manageableStaff.length === 0}
+            onClick={openCreateGlobal}
+            className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            + Nuevo turno
+          </button>
           <button
             type="button"
             onClick={() => setDate((d) => addDaysISO(d, -1))}
@@ -519,7 +490,20 @@ export function AdminCalendar() {
                 >
                   {member.full_name}
                 </div>
-                <div className="relative" style={{ height: GRID_HEIGHT_PX }}>
+                <div
+                  className={`relative transition-colors ${
+                    dragOverStaffId === member.id ? "bg-champagne/10" : ""
+                  }`}
+                  style={{ height: GRID_HEIGHT_PX }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOverStaffId(member.id);
+                  }}
+                  onDragLeave={() =>
+                    setDragOverStaffId((id) => (id === member.id ? null : id))
+                  }
+                  onDrop={(e) => void handleDrop(e, member.id)}
+                >
                   {Array.from({ length: SLOT_COUNT }).map((_, slotIndex) => {
                     const working = isWorking(member.id, slotIndex);
                     return (
@@ -565,8 +549,12 @@ export function AdminCalendar() {
                       <button
                         key={booking.id}
                         type="button"
+                        draggable={canManage(booking.staff_id)}
+                        onDragStart={(e) => handleDragStart(e, booking)}
                         onClick={() => openEdit(booking)}
-                        className="absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm"
+                        className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm ${
+                          canManage(booking.staff_id) ? "cursor-grab active:cursor-grabbing" : ""
+                        }`}
                         style={{
                           top,
                           height,
@@ -593,11 +581,38 @@ export function AdminCalendar() {
             className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg"
           >
             <h3 className="font-display text-lg text-charcoal">Nuevo turno</h3>
-            <p className="mt-1 text-sm text-charcoal/60">
-              {formatDateLabel(date)} · {createSlot.time}
-            </p>
+            <p className="mt-1 text-sm capitalize text-charcoal/60">{formatDateLabel(date)}</p>
 
-            <label className="mt-4 block text-xs text-charcoal/60">Servicio</label>
+            <label htmlFor="create-staff" className="mt-4 block text-xs text-charcoal/60">
+              Profesional
+            </label>
+            <select
+              id="create-staff"
+              required
+              value={createSlot.staffId}
+              onChange={(e) => setCreateSlot((f) => f && { ...f, staffId: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            >
+              {manageableStaff.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.full_name}
+                </option>
+              ))}
+            </select>
+
+            <label htmlFor="create-time" className="mt-3 block text-xs text-charcoal/60">
+              Hora
+            </label>
+            <input
+              id="create-time"
+              type="time"
+              required
+              value={createSlot.time}
+              onChange={(e) => setCreateSlot((f) => f && { ...f, time: e.target.value })}
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            />
+
+            <label className="mt-3 block text-xs text-charcoal/60">Servicio</label>
             <select
               required
               value={createSlot.serviceId}
@@ -650,122 +665,12 @@ export function AdminCalendar() {
       )}
 
       {editingBooking && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg">
-            <div className="flex items-center justify-between">
-              <h3 className="font-display text-lg text-charcoal">
-                {STATUS_LABEL[editingBooking.status]}
-              </h3>
-              <button
-                type="button"
-                onClick={() => setEditingBooking(null)}
-                className="text-sm text-charcoal/40 hover:text-charcoal"
-              >
-                Cerrar
-              </button>
-            </div>
-            <p className="mt-1 text-sm text-charcoal/60">
-              {editingBooking.client_name ?? editingBooking.guest_name ?? "Cliente"}
-            </p>
-
-            <form onSubmit={(e) => void handleReschedule(e)} className="mt-4 flex flex-col gap-2">
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={editForm.date}
-                  onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
-                  className="flex-1 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal"
-                />
-                <input
-                  type="time"
-                  value={editForm.time}
-                  onChange={(e) => setEditForm((f) => ({ ...f, time: e.target.value }))}
-                  className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal"
-                />
-              </div>
-              <select
-                value={editForm.staffId}
-                onChange={(e) => setEditForm((f) => ({ ...f, staffId: e.target.value }))}
-                className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal"
-              >
-                {activeStaff.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.full_name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                disabled={busy}
-                className="self-start rounded-full bg-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
-                Reprogramar
-              </button>
-            </form>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {editingBooking.status === "pending" && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleTransition("confirmed")}
-                  className="rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal disabled:opacity-50"
-                >
-                  Confirmar
-                </button>
-              )}
-              {editingBooking.status === "confirmed" && (
-                <>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleTransition("completed")}
-                    className="rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal disabled:opacity-50"
-                  >
-                    Completar
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void handleTransition("no_show")}
-                    className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 disabled:opacity-50"
-                  >
-                    No asistió
-                  </button>
-                </>
-              )}
-              {editingBooking.payment_status === "paid" ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handlePayment(false)}
-                  className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 disabled:opacity-50"
-                >
-                  Deshacer seña
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handlePayment(true)}
-                  className="rounded-full bg-champagne px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                >
-                  Marcar seña recibida
-                </button>
-              )}
-              {(editingBooking.status === "pending" || editingBooking.status === "confirmed") && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void handleCancel()}
-                  className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 disabled:opacity-50"
-                >
-                  Cancelar turno
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        <BookingEditModal
+          booking={editingBooking}
+          staffOptions={activeStaff}
+          onClose={() => setEditingBooking(null)}
+          onChanged={load}
+        />
       )}
     </div>
   );

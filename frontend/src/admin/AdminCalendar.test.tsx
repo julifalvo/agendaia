@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AdminCalendar } from "./AdminCalendar";
@@ -7,10 +7,11 @@ import { AdminCalendar } from "./AdminCalendar";
 /**
  * Cubre solo lo que tiene implicancia de seguridad/UX (mismo criterio que el
  * resto de `admin/`, que tiene baja densidad de tests): un staff no puede
- * abrir el modal de crear/editar turno en una columna que no es la suya. La
- * restricción real la impone el backend (`_authorize_mutation`); esto prueba
- * que la UI respeta el mismo límite en vez de ofrecer una acción que el
- * backend va a rechazar.
+ * abrir el modal de crear/editar turno en una columna que no es la suya, ni
+ * arrastrar un turno hacia la columna de otro profesional. La restricción
+ * real la impone el backend (`_authorize_mutation`); esto prueba que la UI
+ * respeta el mismo límite en vez de ofrecer una acción que el backend va a
+ * rechazar.
  */
 
 const mockUseProfile = vi.fn();
@@ -19,9 +20,10 @@ vi.mock("../hooks/useProfileContext", () => ({
 }));
 
 const apiGetMock = vi.fn();
+const apiPostMock = vi.fn();
 vi.mock("../lib/api", () => ({
   apiGet: (...args: unknown[]) => apiGetMock(...(args as [string])),
-  apiPost: vi.fn(),
+  apiPost: (...args: unknown[]) => apiPostMock(...(args as [string, unknown])),
   apiPatch: vi.fn(),
   apiPut: vi.fn(),
   apiDelete: vi.fn(),
@@ -31,6 +33,18 @@ vi.mock("../lib/api", () => ({
     context = {};
   },
 }));
+
+/** Fake mínimo de DataTransfer — jsdom no lo implementa. */
+function createDataTransfer() {
+  let payload = "";
+  return {
+    setData: (_type: string, value: string) => {
+      payload = value;
+    },
+    getData: () => payload,
+    effectAllowed: "",
+  };
+}
 
 const STAFF_1 = {
   id: "staff-1",
@@ -119,6 +133,7 @@ function renderCalendar() {
 describe("AdminCalendar", () => {
   beforeEach(() => {
     apiGetMock.mockReset();
+    apiPostMock.mockReset();
     setupApiGet();
   });
 
@@ -202,5 +217,76 @@ describe("AdminCalendar", () => {
     const slots = screen.getAllByLabelText("Crear turno 09:00");
     expect(slots[0]).not.toBeDisabled();
     expect(slots[1]).not.toBeDisabled();
+  });
+
+  it('el botón global "+ Nuevo turno" abre el modal de creación sin depender de un click en la grilla', async () => {
+    mockUseProfile.mockReturnValue({
+      profile: {
+        id: "owner-1",
+        salon_id: "s1",
+        full_name: "Camila",
+        role: "owner",
+        is_active: true,
+        color: null,
+        email: null,
+        phone: null,
+      },
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderCalendar();
+    await waitFor(() => expect(screen.getAllByLabelText("Crear turno 09:00")).toHaveLength(2));
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "+ Nuevo turno" }));
+
+    expect(screen.getByText("Nuevo turno")).toBeInTheDocument();
+    expect(screen.getByLabelText("Profesional")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hora")).toBeInTheDocument();
+  });
+
+  it("un staff no puede arrastrar un turno propio hacia la columna de otro profesional", async () => {
+    const OWN_BOOKING = { ...BOOKING, id: "b2", staff_id: "staff-2", guest_name: "Camila" };
+    apiGetMock.mockImplementation(async (path: string) => {
+      if (path === "/staff") return [STAFF_1, STAFF_2];
+      if (path === "/services/mine") return [SERVICE];
+      if (path.startsWith("/bookings?")) return [BOOKING, OWN_BOOKING];
+      if (path.startsWith("/salon/closures")) return [];
+      if (path.startsWith("/admin/google-calendar/blocks")) return [];
+      const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)/.exec(path);
+      if (scheduleMatch) return workingBlock(scheduleMatch[1]);
+      throw new Error(`apiGet no mockeado para: ${path}`);
+    });
+    mockUseProfile.mockReturnValue({
+      profile: {
+        id: "staff-2",
+        salon_id: "s1",
+        full_name: "Beatriz",
+        role: "staff",
+        is_active: true,
+        color: "#0000ff",
+        email: null,
+        phone: null,
+      },
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderCalendar();
+
+    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
+    const otherColumnSlot = screen.getAllByLabelText("Crear turno 09:00")[0]; // columna de staff-1
+    const otherColumn = otherColumnSlot.parentElement!;
+
+    const dataTransfer = createDataTransfer();
+    fireEvent.dragStart(ownBookingButton, { dataTransfer });
+    fireEvent.dragOver(otherColumn, { dataTransfer });
+    fireEvent.drop(otherColumn, { dataTransfer, clientY: 100 });
+
+    expect(apiPostMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/reschedule"),
+      expect.anything(),
+    );
   });
 });
