@@ -237,6 +237,181 @@ function TransferDetails() {
   );
 }
 
+const ICON_PROPS = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.8,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
+
+function IconDroplet({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M12 3c3.2 4.2 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2.8-6.8 6-11z" />
+    </svg>
+  );
+}
+
+function IconFootprint({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M9.5 22c-1.9 0-3-1.4-3-3.4 0-2.6 1.2-3.6 1.2-6.1 0-2-.9-3-.9-5.1A4.2 4.2 0 0 1 11 3a4 4 0 0 1 4 4c0 3-1.5 4.8-1.5 8.3 0 2.7 1.2 3.7 1.2 4.9 0 1-.9 1.8-2.2 1.8-1.7 0-2-1-3-1s-1.1 1-2 1z" />
+      <circle cx="8" cy="6.4" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function IconEyeLash({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M2.5 12S6.5 6 12 6s9.5 6 9.5 6-4 6-9.5 6-9.5-6-9.5-6z" />
+      <circle cx="12" cy="12" r="2.3" />
+      <path d="M5 7.5 3.7 6M19 7.5 20.3 6M12 5V3" />
+    </svg>
+  );
+}
+
+function IconScissors({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <circle cx="6" cy="6.5" r="2.1" />
+      <circle cx="6" cy="17.5" r="2.1" />
+      <path d="M20 5.5 7.8 12M20 18.5 7.8 12M9.8 12h2.2" />
+    </svg>
+  );
+}
+
+function IconLeaf({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M19.5 4.5c-9 0-14 4.6-14 13.5 8.6 0 14-5 14-13.5z" />
+      <path d="M6 18.5c3.6-3.6 7.2-7.2 11-11" />
+    </svg>
+  );
+}
+
+function IconLipstick({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <rect x="8.5" y="10.5" width="7" height="9.5" rx="1.6" />
+      <path d="M8.5 10.5 10 4h4l1.5 6.5" />
+    </svg>
+  );
+}
+
+function IconSparkle({ className }: { className?: string }) {
+  return (
+    <svg {...ICON_PROPS} className={className}>
+      <path d="M12 3.5 13.7 9.3 19.5 11 13.7 12.7 12 18.5 10.3 12.7 4.5 11 10.3 9.3 12 3.5z" />
+    </svg>
+  );
+}
+
+/** Heurística por palabras clave sobre el nombre de la categoría — no depende
+ * de un campo extra en el backend, así que una categoría nueva que un salón
+ * cree (ej. "Depilación") matchea sin tocar código; si no matchea nada, cae
+ * al sparkle genérico. */
+function categoryIcon(name: string, className?: string) {
+  const key = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (key.includes("mani") || key.includes("una") || key.includes("gel") || key.includes("nail")) {
+    return <IconDroplet className={className} />;
+  }
+  if (key.includes("pedi") || key.includes("pie")) return <IconFootprint className={className} />;
+  if (key.includes("ceja") || key.includes("pestan") || key.includes("lash")) {
+    return <IconEyeLash className={className} />;
+  }
+  if (key.includes("pelo") || key.includes("cabello") || key.includes("corte") || key.includes("peinad")) {
+    return <IconScissors className={className} />;
+  }
+  if (key.includes("facial") || key.includes("piel") || key.includes("spa") || key.includes("masaje")) {
+    return <IconLeaf className={className} />;
+  }
+  if (key.includes("maquilla") || key.includes("labio")) return <IconLipstick className={className} />;
+  return <IconSparkle className={className} />;
+}
+
+function ServiceOption({
+  service,
+  isSelected,
+  onSelect,
+  nested,
+}: {
+  service: ApiService;
+  isSelected: boolean;
+  onSelect: () => void;
+  nested?: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      whileHover={{ y: isSelected ? 0 : -3, scale: isSelected ? 1 : 1.01 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={() => {
+        haptic();
+        onSelect();
+      }}
+      className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
+        isSelected
+          ? "border-bubblegum/40 bg-bubblegum/[0.06]"
+          : nested
+            ? "border-charcoal/6 bg-charcoal/[0.015] hover:border-baby-pink"
+            : "border-charcoal/8 bg-white hover:border-baby-pink"
+      }`}
+      style={{
+        boxShadow: isSelected ? "0 10px 24px -12px rgba(255, 111, 160, 0.45)" : "0 1px 2px rgba(74, 53, 64, 0.04)",
+      }}
+    >
+      <motion.span
+        animate={{ opacity: isSelected ? 1 : 0 }}
+        className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-bubblegum/0 via-bubblegum to-champagne/0"
+      />
+      <div>
+        <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
+        <p className="mt-0.5 text-[13px] text-charcoal/45">
+          {service.duration_minutes} min ·{" "}
+          {new Intl.NumberFormat("es-AR", {
+            style: "currency",
+            currency: service.currency,
+          }).format(Number(service.price))}
+        </p>
+      </div>
+      <div
+        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+          isSelected ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne" : "border-charcoal/15"
+        }`}
+      >
+        <AnimatePresence>
+          {isSelected && (
+            <motion.svg
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 text-white"
+              fill="none"
+            >
+              <path
+                d="M5 13l4 4L19 7"
+                stroke="currentColor"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </motion.svg>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.button>
+  );
+}
+
 export function BookingFlow() {
   const { user } = useAuth();
   const { profile } = useProfile();
@@ -258,6 +433,17 @@ export function BookingFlow() {
 
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [staffForService, setStaffForService] = useState<ApiPublicStaff[]>([]);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  function toggleCategory(key: string) {
+    haptic(6);
+    setExpandedCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const [date, setDate] = useState(todayISODate());
   const [viewDate, setViewDate] = useState(() => startOfMonth(new Date()));
@@ -593,86 +779,110 @@ export function BookingFlow() {
             No hay servicios disponibles por el momento.
           </p>
         )}
-        <div className="mt-4 flex flex-col gap-5">
+        <div className="mt-4 flex flex-col gap-3">
           {!loadingServices &&
-            groupedServices.map((group) => (
-              <div key={group.key} className="flex flex-col gap-2">
-                {group.label && (
-                  <p className="px-1 text-xs font-medium uppercase tracking-wide text-charcoal/40">
-                    {group.label}
-                  </p>
-                )}
-                {group.services.map((service) => {
-                  const isSelected = service.id === selectedServiceId;
-                  return (
-                    <motion.button
-                      key={service.id}
-                      type="button"
-                      whileHover={{ y: isSelected ? 0 : -3, scale: isSelected ? 1 : 1.01 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => {
-                        haptic();
-                        setSelectedServiceId(service.id);
-                      }}
-                      className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
-                        isSelected
-                          ? "border-bubblegum/40 bg-bubblegum/[0.06]"
-                          : "border-charcoal/8 bg-white hover:border-baby-pink"
-                      }`}
-                      style={{
-                        boxShadow: isSelected
-                          ? "0 10px 24px -12px rgba(255, 111, 160, 0.45)"
-                          : "0 1px 2px rgba(74, 53, 64, 0.04)",
-                      }}
-                    >
-                      <motion.span
-                        animate={{ opacity: isSelected ? 1 : 0 }}
-                        className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-bubblegum/0 via-bubblegum to-champagne/0"
+            groupedServices.map((group) => {
+              if (!group.label) {
+                // Sin categorías definidas: lista plana, nada que expandir.
+                return (
+                  <div key={group.key} className="flex flex-col gap-2">
+                    {group.services.map((service) => (
+                      <ServiceOption
+                        key={service.id}
+                        service={service}
+                        isSelected={service.id === selectedServiceId}
+                        onSelect={() => setSelectedServiceId(service.id)}
                       />
-                      <div>
-                        <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
-                        <p className="mt-0.5 text-[13px] text-charcoal/45">
-                          {service.duration_minutes} min ·{" "}
-                          {new Intl.NumberFormat("es-AR", {
-                            style: "currency",
-                            currency: service.currency,
-                          }).format(Number(service.price))}
-                        </p>
-                      </div>
-                      <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                          isSelected
-                            ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne"
-                            : "border-charcoal/15"
+                    ))}
+                  </div>
+                );
+              }
+
+              const isOpen = expandedCategories.has(group.key);
+              const hasSelected = group.services.some((s) => s.id === selectedServiceId);
+              const isHighlighted = hasSelected || isOpen;
+              return (
+                <motion.div
+                  key={group.key}
+                  layout
+                  className={`overflow-hidden rounded-[1.6rem] border transition-colors duration-300 ${
+                    hasSelected
+                      ? "border-bubblegum/30 bg-bubblegum/[0.035]"
+                      : isOpen
+                        ? "border-champagne/30 bg-champagne/[0.04]"
+                        : "border-charcoal/8 bg-white"
+                  }`}
+                  style={{
+                    boxShadow: isHighlighted
+                      ? "0 8px 20px -14px rgba(255, 111, 160, 0.5)"
+                      : "0 1px 2px rgba(74, 53, 64, 0.04)",
+                  }}
+                >
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.985 }}
+                    onClick={() => toggleCategory(group.key)}
+                    className="tap-btn flex w-full items-center justify-between gap-3 px-3.5 py-3.5 text-left"
+                    aria-expanded={isOpen}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br transition-colors duration-300 ${
+                          isHighlighted
+                            ? "from-bubblegum/30 to-champagne/30 text-champagne"
+                            : "from-bubblegum/10 to-champagne/10 text-champagne/70"
                         }`}
                       >
-                        <AnimatePresence>
-                          {isSelected && (
-                            <motion.svg
-                              initial={{ scale: 0, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0, opacity: 0 }}
-                              transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                              viewBox="0 0 24 24"
-                              className="h-3.5 w-3.5 text-white"
-                              fill="none"
-                            >
-                              <path
-                                d="M5 13l4 4L19 7"
-                                stroke="currentColor"
-                                strokeWidth={3}
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              />
-                            </motion.svg>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-            ))}
+                        {categoryIcon(group.label, "h-[17px] w-[17px]")}
+                      </span>
+                      <span className="font-display text-[1.05rem] text-charcoal">{group.label}</span>
+                      <span className="rounded-full bg-charcoal/6 px-2 py-0.5 text-[11px] font-medium text-charcoal/40">
+                        {group.services.length}
+                      </span>
+                    </div>
+                    <motion.svg
+                      animate={{ rotate: isOpen ? 180 : 0 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4 shrink-0 text-charcoal/40"
+                      fill="none"
+                    >
+                      <path
+                        d="M6 9l6 6 6-6"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </motion.svg>
+                  </motion.button>
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        key="content"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+                        className="overflow-hidden"
+                      >
+                        <div className="flex flex-col gap-2 px-3 pb-3.5 pt-0.5">
+                          {group.services.map((service) => (
+                            <ServiceOption
+                              key={service.id}
+                              service={service}
+                              isSelected={service.id === selectedServiceId}
+                              onSelect={() => setSelectedServiceId(service.id)}
+                              nested
+                            />
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
         </div>
       </section>
 
