@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Integer,
     Numeric,
     SmallInteger,
@@ -131,6 +132,27 @@ class Profile(Base):
     __table_args__ = (UniqueConstraint("id", "salon_id"),)
 
 
+class ServiceCategory(Base):
+    __tablename__ = "service_categories"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    salon_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("salons.id")
+    )
+    name: Mapped[str] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (UniqueConstraint("id", "salon_id"),)
+
+
 class Service(Base):
     __tablename__ = "services"
 
@@ -140,6 +162,9 @@ class Service(Base):
     salon_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("salons.id")
     )
+    #: Sector del catálogo (p. ej. "Uñas", "Peluquería"). NULL = sin
+    #: categorizar. FK compuesta con salon_id, ver __table_args__.
+    category_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True))
     name: Mapped[str] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
     duration_minutes: Mapped[int] = mapped_column(Integer)
@@ -152,6 +177,13 @@ class Service(Base):
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["category_id", "salon_id"],
+            ["service_categories.id", "service_categories.salon_id"],
+        ),
     )
 
     @property

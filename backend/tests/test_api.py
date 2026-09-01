@@ -546,6 +546,8 @@ def test_owner_crea_servicio_en_su_propio_salon(client, monkeypatch):
         return SimpleNamespace(
             id=uuid.uuid4(),
             salon_id=salon_id,
+            category_id=data.category_id,
+            category_name=None,
             name=data.name,
             description=data.description,
             duration_minutes=data.duration_minutes,

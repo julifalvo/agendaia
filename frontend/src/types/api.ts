@@ -9,6 +9,9 @@ import type { AppointmentStatus } from "./booking";
 export interface ApiService {
   id: string;
   salon_id: string;
+  category_id: string | null;
+  // Resuelto server-side, no es una columna real — ver ServiceOut en el backend.
+  category_name: string | null;
   name: string;
   description: string | null;
   duration_minutes: number;
@@ -17,6 +20,23 @@ export interface ApiService {
   price: string;
   currency: string;
   is_active: boolean;
+}
+
+export interface ApiCategory {
+  id: string;
+  salon_id: string;
+  name: string;
+  sort_order: number;
+}
+
+export interface CategoryInput {
+  name: string;
+  sort_order?: number;
+}
+
+export interface CategoryUpdateInput {
+  name?: string;
+  sort_order?: number;
 }
 
 export interface ApiSlot {
@@ -98,6 +118,7 @@ export interface ApiStaff {
 export interface ServiceInput {
   name: string;
   description?: string | null;
+  category_id?: string | null;
   duration_minutes: number;
   buffer_minutes?: number;
   price: string;
@@ -107,6 +128,7 @@ export interface ServiceInput {
 export interface ServiceUpdateInput {
   name?: string;
   description?: string | null;
+  category_id?: string | null;
   duration_minutes?: number;
   buffer_minutes?: number;
   price?: string;

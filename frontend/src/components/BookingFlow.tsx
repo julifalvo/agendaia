@@ -7,7 +7,7 @@ import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
 import { BookingCard } from "./BookingCard";
 import { ConfettiBurst } from "./ConfettiBurst";
-import type { ApiAvailability, ApiBooking, ApiPublicStaff, ApiService, ApiSlot } from "../types/api";
+import type { ApiAvailability, ApiBooking, ApiCategory, ApiPublicStaff, ApiService, ApiSlot } from "../types/api";
 
 const SALON_ID = import.meta.env.VITE_SALON_ID;
 
@@ -248,6 +248,7 @@ export function BookingFlow() {
   const bookingAsGuest = !user || profile?.role !== "client";
 
   const [services, setServices] = useState<ApiService[]>([]);
+  const [categories, setCategories] = useState<ApiCategory[]>([]);
   const [loadingServices, setLoadingServices] = useState(true);
   const [servicesError, setServicesError] = useState<string | null>(null);
   // El backend gratuito "duerme" tras un rato sin uso y tarda unos segundos
@@ -342,11 +343,43 @@ export function BookingFlow() {
     [services, selectedServiceId],
   );
 
+  const groupedServices = useMemo(() => {
+    const byCategory = new Map<string, ApiService[]>();
+    for (const service of services) {
+      const key = service.category_id ?? "__uncategorized__";
+      const bucket = byCategory.get(key);
+      if (bucket) bucket.push(service);
+      else byCategory.set(key, [service]);
+    }
+    const orderedCategories = [...categories].sort((a, b) => a.sort_order - b.sort_order);
+    const groups: { key: string; label: string | null; services: ApiService[] }[] = [];
+    for (const category of orderedCategories) {
+      const bucket = byCategory.get(category.id);
+      if (bucket) groups.push({ key: category.id, label: category.name, services: bucket });
+    }
+    const uncategorized = byCategory.get("__uncategorized__");
+    if (uncategorized) {
+      // Sin encabezado si es la única categoría (catálogo chico sin sectorizar).
+      groups.push({
+        key: "__uncategorized__",
+        label: groups.length > 0 ? "Otros" : null,
+        services: uncategorized,
+      });
+    }
+    return groups;
+  }, [services, categories]);
+
   const loadServices = useCallback(() => {
     setLoadingServices(true);
     setServicesError(null);
-    apiGet<ApiService[]>(`/services?salon_id=${SALON_ID}`)
-      .then(setServices)
+    Promise.all([
+      apiGet<ApiService[]>(`/services?salon_id=${SALON_ID}`),
+      apiGet<ApiCategory[]>(`/categories?salon_id=${SALON_ID}`),
+    ])
+      .then(([servicesRes, categoriesRes]) => {
+        setServices(servicesRes);
+        setCategories(categoriesRes);
+      })
       .catch((err) =>
         setServicesError(err instanceof Error ? err.message : "No se pudieron cargar los servicios"),
       )
@@ -560,76 +593,86 @@ export function BookingFlow() {
             No hay servicios disponibles por el momento.
           </p>
         )}
-        <div className="mt-4 flex flex-col gap-2">
-          {!loadingServices && services.map((service) => {
-            const isSelected = service.id === selectedServiceId;
-            return (
-              <motion.button
-                key={service.id}
-                type="button"
-                whileHover={{ y: isSelected ? 0 : -3, scale: isSelected ? 1 : 1.01 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => {
-                  haptic();
-                  setSelectedServiceId(service.id);
-                }}
-                className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
-                  isSelected
-                    ? "border-bubblegum/40 bg-bubblegum/[0.06]"
-                    : "border-charcoal/8 bg-white hover:border-baby-pink"
-                }`}
-                style={{
-                  boxShadow: isSelected
-                    ? "0 10px 24px -12px rgba(255, 111, 160, 0.45)"
-                    : "0 1px 2px rgba(74, 53, 64, 0.04)",
-                }}
-              >
-                <motion.span
-                  animate={{ opacity: isSelected ? 1 : 0 }}
-                  className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-bubblegum/0 via-bubblegum to-champagne/0"
-                />
-                <div>
-                  <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
-                  <p className="mt-0.5 text-[13px] text-charcoal/45">
-                    {service.duration_minutes} min ·{" "}
-                    {new Intl.NumberFormat("es-AR", {
-                      style: "currency",
-                      currency: service.currency,
-                    }).format(Number(service.price))}
+        <div className="mt-4 flex flex-col gap-5">
+          {!loadingServices &&
+            groupedServices.map((group) => (
+              <div key={group.key} className="flex flex-col gap-2">
+                {group.label && (
+                  <p className="px-1 text-xs font-medium uppercase tracking-wide text-charcoal/40">
+                    {group.label}
                   </p>
-                </div>
-                <div
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    isSelected
-                      ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne"
-                      : "border-charcoal/15"
-                  }`}
-                >
-                  <AnimatePresence>
-                    {isSelected && (
-                      <motion.svg
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ type: "spring", stiffness: 500, damping: 25 }}
-                        viewBox="0 0 24 24"
-                        className="h-3.5 w-3.5 text-white"
-                        fill="none"
+                )}
+                {group.services.map((service) => {
+                  const isSelected = service.id === selectedServiceId;
+                  return (
+                    <motion.button
+                      key={service.id}
+                      type="button"
+                      whileHover={{ y: isSelected ? 0 : -3, scale: isSelected ? 1 : 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => {
+                        haptic();
+                        setSelectedServiceId(service.id);
+                      }}
+                      className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
+                        isSelected
+                          ? "border-bubblegum/40 bg-bubblegum/[0.06]"
+                          : "border-charcoal/8 bg-white hover:border-baby-pink"
+                      }`}
+                      style={{
+                        boxShadow: isSelected
+                          ? "0 10px 24px -12px rgba(255, 111, 160, 0.45)"
+                          : "0 1px 2px rgba(74, 53, 64, 0.04)",
+                      }}
+                    >
+                      <motion.span
+                        animate={{ opacity: isSelected ? 1 : 0 }}
+                        className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-bubblegum/0 via-bubblegum to-champagne/0"
+                      />
+                      <div>
+                        <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
+                        <p className="mt-0.5 text-[13px] text-charcoal/45">
+                          {service.duration_minutes} min ·{" "}
+                          {new Intl.NumberFormat("es-AR", {
+                            style: "currency",
+                            currency: service.currency,
+                          }).format(Number(service.price))}
+                        </p>
+                      </div>
+                      <div
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                          isSelected
+                            ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne"
+                            : "border-charcoal/15"
+                        }`}
                       >
-                        <path
-                          d="M5 13l4 4L19 7"
-                          stroke="currentColor"
-                          strokeWidth={3}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </motion.svg>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </motion.button>
-            );
-          })}
+                        <AnimatePresence>
+                          {isSelected && (
+                            <motion.svg
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              transition={{ type: "spring", stiffness: 500, damping: 25 }}
+                              viewBox="0 0 24 24"
+                              className="h-3.5 w-3.5 text-white"
+                              fill="none"
+                            >
+                              <path
+                                d="M5 13l4 4L19 7"
+                                stroke="currentColor"
+                                strokeWidth={3}
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </motion.svg>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            ))}
         </div>
       </section>
 

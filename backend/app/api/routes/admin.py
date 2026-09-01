@@ -18,6 +18,9 @@ from app.core.errors import PermissionDenied, ResourceNotFound
 from app.db.models import Profile, Service, TimeOff, UserRole
 from app.db.session import get_session
 from app.schemas.admin import (
+    CategoryCreate,
+    CategoryOut,
+    CategoryUpdate,
     PublicStaffOut,
     SalonClosureCreate,
     SalonClosureOut,
@@ -54,6 +57,63 @@ def _require_salon_staff(profile: Profile) -> None:
     exclusivamente para los GET."""
     if profile.role not in (UserRole.owner, UserRole.staff):
         raise PermissionDenied("Solo el staff o el dueño del salón pueden ver esto")
+
+
+# --- Categorías de servicios -----------------------------------------------
+
+
+@router.get("/categories", response_model=list[CategoryOut])
+async def list_categories(
+    salon_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> list[CategoryOut]:
+    """Público a propósito: es lo que agrupa la lista de servicios en la
+    página de reservas sin login, igual criterio que `GET /services`."""
+    rows = await admin.list_categories(session, salon_id)
+    return [CategoryOut.model_validate(r) for r in rows]
+
+
+@router.get("/categories/mine", response_model=list[CategoryOut])
+async def list_my_categories(
+    profile: Profile = Depends(require_roles(UserRole.owner, UserRole.staff)),
+    session: AsyncSession = Depends(get_session),
+) -> list[CategoryOut]:
+    rows = await admin.list_categories(session, profile.salon_id)
+    return [CategoryOut.model_validate(r) for r in rows]
+
+
+@router.post("/categories", response_model=CategoryOut, status_code=201)
+async def create_category(
+    payload: CategoryCreate,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> CategoryOut:
+    category = await admin.create_category(session, profile.salon_id, payload)
+    return CategoryOut.model_validate(category)
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryOut)
+async def update_category(
+    category_id: uuid.UUID,
+    payload: CategoryUpdate,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> CategoryOut:
+    category = await admin.update_category(
+        session, profile.salon_id, category_id, payload
+    )
+    return CategoryOut.model_validate(category)
+
+
+@router.delete("/categories/{category_id}", status_code=204)
+async def delete_category(
+    category_id: uuid.UUID,
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Borrado real: los servicios que la usaban quedan sin categoría en vez
+    de bloquear el borrado, ver docstring de `admin.delete_category`."""
+    await admin.delete_category(session, profile.salon_id, category_id)
 
 
 # --- Services ----------------------------------------------------------------

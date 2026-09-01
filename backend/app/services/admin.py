@@ -20,12 +20,15 @@ from app.db.models import (
     Profile,
     SalonClosure,
     Service,
+    ServiceCategory,
     StaffScheduleDate,
     StaffService,
     TimeOff,
     UserRole,
 )
 from app.schemas.admin import (
+    CategoryCreate,
+    CategoryUpdate,
     ScheduleBlockIn,
     ServiceCreate,
     ServiceUpdate,
@@ -36,7 +39,105 @@ from app.services import supabase_admin
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
 
+# --- Categorías de servicios ---------------------------------------------
+
+
+async def list_categories(
+    session: AsyncSession, salon_id: uuid.UUID
+) -> list[ServiceCategory]:
+    stmt = (
+        select(ServiceCategory)
+        .where(ServiceCategory.salon_id == salon_id)
+        .order_by(ServiceCategory.sort_order, ServiceCategory.name)
+    )
+    return list((await session.scalars(stmt)).all())
+
+
+async def _load_category(
+    session: AsyncSession, salon_id: uuid.UUID, category_id: uuid.UUID
+) -> ServiceCategory:
+    category = await session.get(ServiceCategory, category_id)
+    if category is None or category.salon_id != salon_id:
+        raise ResourceNotFound("Categoría inexistente", category_id=str(category_id))
+    return category
+
+
+async def create_category(
+    session: AsyncSession, salon_id: uuid.UUID, data: CategoryCreate
+) -> ServiceCategory:
+    category = ServiceCategory(salon_id=salon_id, **data.model_dump())
+    session.add(category)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if "service_categories_salon_name_key" in str(getattr(exc, "orig", exc)):
+            raise ConflictError(
+                f"Ya existe una categoría llamada '{data.name}' en este salón"
+            ) from exc
+        raise
+    await session.refresh(category)
+    return category
+
+
+async def update_category(
+    session: AsyncSession,
+    salon_id: uuid.UUID,
+    category_id: uuid.UUID,
+    data: CategoryUpdate,
+) -> ServiceCategory:
+    category = await _load_category(session, salon_id, category_id)
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(category, field, value)
+
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        if "service_categories_salon_name_key" in str(getattr(exc, "orig", exc)):
+            raise ConflictError("Ya existe una categoría con ese nombre") from exc
+        raise
+    await session.refresh(category)
+    return category
+
+
+async def delete_category(
+    session: AsyncSession, salon_id: uuid.UUID, category_id: uuid.UUID
+) -> None:
+    """Borrado real: los servicios que la usaban quedan sin categoría
+    (`services.category_id` es `ON DELETE SET NULL`), no hay historial que
+    proteger como con servicios/staff."""
+    category = await _load_category(session, salon_id, category_id)
+    await session.delete(category)
+    await session.commit()
+
+
 # --- Services ----------------------------------------------------------------
+
+
+async def _category_names(
+    session: AsyncSession, salon_id: uuid.UUID
+) -> dict[uuid.UUID, str]:
+    rows = await session.execute(
+        select(ServiceCategory.id, ServiceCategory.name).where(
+            ServiceCategory.salon_id == salon_id
+        )
+    )
+    return dict(rows.all())
+
+
+async def _attach_category_names(
+    session: AsyncSession, salon_id: uuid.UUID, services: list[Service]
+) -> list[Service]:
+    """`ServiceOut.category_name` no es una columna real: se resuelve acá con
+    un solo query extra y se cuelga como atributo transitorio antes de
+    serializar (evita un join por cada listado de servicios)."""
+    if not services:
+        return services
+    names = await _category_names(session, salon_id)
+    for service in services:
+        service.category_name = names.get(service.category_id)  # type: ignore[attr-defined]
+    return services
 
 
 async def list_services(
@@ -46,7 +147,8 @@ async def list_services(
     if not include_inactive:
         stmt = stmt.where(Service.is_active.is_(True))
     stmt = stmt.order_by(Service.name)
-    return list((await session.scalars(stmt)).all())
+    services = list((await session.scalars(stmt)).all())
+    return await _attach_category_names(session, salon_id, services)
 
 
 async def _load_service(
@@ -58,9 +160,18 @@ async def _load_service(
     return service
 
 
+async def _validate_category(
+    session: AsyncSession, salon_id: uuid.UUID, category_id: uuid.UUID | None
+) -> None:
+    if category_id is None:
+        return
+    await _load_category(session, salon_id, category_id)
+
+
 async def create_service(
     session: AsyncSession, salon_id: uuid.UUID, data: ServiceCreate
 ) -> Service:
+    await _validate_category(session, salon_id, data.category_id)
     service = Service(salon_id=salon_id, **data.model_dump())
     session.add(service)
     try:
@@ -73,6 +184,7 @@ async def create_service(
             ) from exc
         raise
     await session.refresh(service)
+    await _attach_category_names(session, salon_id, [service])
     return service
 
 
@@ -83,7 +195,10 @@ async def update_service(
     data: ServiceUpdate,
 ) -> Service:
     service = await _load_service(session, salon_id, service_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    if "category_id" in updates:
+        await _validate_category(session, salon_id, updates["category_id"])
+    for field, value in updates.items():
         setattr(service, field, value)
 
     try:
@@ -94,6 +209,7 @@ async def update_service(
             raise ConflictError("Ya existe un servicio con ese nombre") from exc
         raise
     await session.refresh(service)
+    await _attach_category_names(session, salon_id, [service])
     return service
 
 
@@ -108,6 +224,7 @@ async def deactivate_service(
     service.is_active = False
     await session.commit()
     await session.refresh(service)
+    await _attach_category_names(session, salon_id, [service])
     return service
 
 

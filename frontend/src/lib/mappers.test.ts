@@ -31,6 +31,8 @@ function makeApiBooking(overrides: Partial<ApiBooking> = {}): ApiBooking {
 const SERVICE: ApiService = {
   id: "service-1",
   salon_id: "s1",
+  category_id: null,
+  category_name: null,
   name: "Manicura",
   description: null,
   duration_minutes: 60,

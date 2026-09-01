@@ -10,12 +10,37 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.db.models import UserRole
 
 
+# --- Categorías de servicios -----------------------------------------------
+
+
+class CategoryCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    sort_order: int = Field(default=0)
+
+
+class CategoryUpdate(BaseModel):
+    """Actualización parcial: solo se tocan los campos presentes."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    sort_order: int | None = None
+
+
+class CategoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    salon_id: uuid.UUID
+    name: str
+    sort_order: int
+
+
 # --- Services ------------------------------------------------------------
 
 
 class ServiceCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    category_id: uuid.UUID | None = None
     duration_minutes: int = Field(ge=5, le=600)
     buffer_minutes: int = Field(default=0, ge=0, le=120)
     price: Decimal = Field(ge=0)
@@ -27,6 +52,7 @@ class ServiceUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    category_id: uuid.UUID | None = Field(default=None)
     duration_minutes: int | None = Field(default=None, ge=5, le=600)
     buffer_minutes: int | None = Field(default=None, ge=0, le=120)
     price: Decimal | None = Field(default=None, ge=0)
@@ -39,6 +65,10 @@ class ServiceOut(BaseModel):
 
     id: uuid.UUID
     salon_id: uuid.UUID
+    category_id: uuid.UUID | None
+    #: Nombre de la categoría, resuelto por app.services.admin — no es una
+    #: columna real de `services`, se completa a mano antes de serializar.
+    category_name: str | None = None
     name: str
     description: str | None
     duration_minutes: int
