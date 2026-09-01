@@ -23,7 +23,7 @@ export function LoginPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="rounded-2xl border border-baby-pink/30 bg-white/70 p-6 shadow-sm backdrop-blur-md">
+    <div className="tap-card rounded-2xl border border-baby-pink/30 bg-white/70 p-6 shadow-sm backdrop-blur-md">
       <h2 className="font-display text-xl font-semibold text-charcoal">Iniciar sesión</h2>
       <p className="mt-1 text-xs text-charcoal/50">Acceso exclusivo para el equipo del salón.</p>
 
@@ -34,7 +34,7 @@ export function LoginPanel({ onClose }: { onClose: () => void }) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors focus:border-champagne"
+          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
         />
         <input
           type="password"
@@ -43,7 +43,7 @@ export function LoginPanel({ onClose }: { onClose: () => void }) {
           minLength={6}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors focus:border-champagne"
+          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
         />
 
         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -51,8 +51,8 @@ export function LoginPanel({ onClose }: { onClose: () => void }) {
         <button
           type="submit"
           disabled={submitting}
-          className="mt-1 rounded-full bg-baby-pink px-4 py-2 text-sm font-medium text-charcoal
-            transition-colors duration-200 hover:bg-champagne hover:text-white disabled:opacity-50"
+          className="tap-btn mt-1 rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-2 text-sm font-medium
+            text-white transition-opacity duration-200 hover:opacity-90 disabled:opacity-50"
         >
           {submitting ? "Un momento..." : "Ingresar"}
         </button>

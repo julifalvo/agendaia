@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { apiGet, apiPost, ApiError } from "../lib/api";
+import { haptic } from "../lib/haptics";
 import { toDisplayBooking } from "../lib/mappers";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
 import { BookingCard } from "./BookingCard";
+import { ConfettiBurst } from "./ConfettiBurst";
 import type { ApiAvailability, ApiBooking, ApiPublicStaff, ApiService, ApiSlot } from "../types/api";
 
 const SALON_ID = import.meta.env.VITE_SALON_ID;
@@ -30,8 +32,6 @@ const timeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-const weekdayFormatter = new Intl.DateTimeFormat("es-AR", { weekday: "short" });
-const monthFormatter = new Intl.DateTimeFormat("es-AR", { month: "short" });
 const fullDateFormatter = new Intl.DateTimeFormat("es-AR", {
   weekday: "long",
   day: "numeric",
@@ -52,19 +52,33 @@ function todayISODate(): string {
   return toLocalISODate(new Date());
 }
 
-function nextDays(count: number) {
-  const today = new Date();
-  return Array.from({ length: count }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() + i);
-    return {
-      iso: toLocalISODate(d),
-      weekday: weekdayFormatter.format(d).replace(".", ""),
-      day: d.getDate(),
-      month: monthFormatter.format(d).replace(".", ""),
-      isToday: i === 0,
-    };
-  });
+const WEEKDAY_HEADERS = ["L", "M", "M", "J", "V", "S", "D"];
+
+const monthYearFormatter = new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" });
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+interface MonthCell {
+  iso: string;
+  day: number;
+}
+
+/** Grilla tipo iOS: semana arranca en lunes, celdas vacías para el offset
+ * inicial (no se muestran días del mes adyacente, para no dar la falsa
+ * impresión de que son tappeables). */
+function buildMonthGrid(viewDate: Date): (MonthCell | null)[] {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstWeekdayMon0 = (new Date(year, month, 1).getDay() + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const cells: (MonthCell | null)[] = Array.from({ length: firstWeekdayMon0 }, () => null);
+  for (let day = 1; day <= daysInMonth; day++) {
+    cells.push({ iso: toLocalISODate(new Date(year, month, day)), day });
+  }
+  return cells;
 }
 
 function groupSlots(slots: ApiSlot[]) {
@@ -103,7 +117,7 @@ function ProgressTrack({ step }: { step: number }) {
     <div className="mb-7">
       <div className="h-1 overflow-hidden rounded-full bg-charcoal/8">
         <motion.div
-          className="h-full rounded-full bg-champagne"
+          className="h-full rounded-full bg-gradient-to-r from-bubblegum to-champagne"
           initial={false}
           animate={{ width: `${progress}%` }}
           transition={{ type: "spring", stiffness: 300, damping: 32 }}
@@ -130,7 +144,7 @@ function BackLink({ onClick, children }: { onClick: () => void; children: ReactN
     <button
       type="button"
       onClick={onClick}
-      className="mb-2 flex items-center gap-1 text-xs font-medium text-charcoal/40 transition-colors hover:text-champagne"
+      className="tap-btn mb-2 flex items-center gap-1 text-xs font-medium text-charcoal/40 transition-colors hover:text-champagne"
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none">
         <path
@@ -193,7 +207,7 @@ function CopyableField({ label, value }: { label: string; value: string }) {
     <button
       type="button"
       onClick={handleCopy}
-      className="flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left transition-colors hover:bg-champagne/10 active:bg-champagne/15"
+      className="tap-btn flex w-full items-center justify-between gap-2 rounded-lg py-1 text-left transition-colors hover:bg-champagne/10 active:bg-champagne/15"
     >
       <span>
         <span className="text-charcoal/45">{label}:</span>{" "}
@@ -244,11 +258,70 @@ export function BookingFlow() {
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [staffForService, setStaffForService] = useState<ApiPublicStaff[]>([]);
 
-  const days = useMemo(() => nextDays(14), []);
   const [date, setDate] = useState(todayISODate());
+  const [viewDate, setViewDate] = useState(() => startOfMonth(new Date()));
   const [slots, setSlots] = useState<ApiSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<ApiSlot | null>(null);
+  const [searchingNextDate, setSearchingNextDate] = useState(false);
+  const [noNextDateFound, setNoNextDateFound] = useState(false);
+
+  const currentMonthStart = useMemo(() => startOfMonth(new Date()), []);
+  const monthGrid = useMemo(() => buildMonthGrid(viewDate), [viewDate]);
+
+  function goToDate(iso: string) {
+    haptic(6);
+    setDate(iso);
+    setViewDate(startOfMonth(new Date(`${iso}T00:00:00`)));
+    setNoNextDateFound(false);
+  }
+
+  /** Busca en bloques de 10 días (en paralelo) el próximo día con algún slot
+   * libre para el servicio elegido — no hay endpoint de rango en el backend,
+   * así que se consulta día por día, pero de a lotes para no hacer esperar
+   * ~90 round-trips secuenciales. */
+  async function goToNextAvailableDate() {
+    if (!selectedServiceId) return;
+    setSearchingNextDate(true);
+    setNoNextDateFound(false);
+    const CHUNK_SIZE = 10;
+    const MAX_DAYS_AHEAD = 90;
+    const base = new Date(`${date}T00:00:00`);
+    try {
+      for (let offset = 1; offset <= MAX_DAYS_AHEAD; offset += CHUNK_SIZE) {
+        const offsets = Array.from(
+          { length: Math.min(CHUNK_SIZE, MAX_DAYS_AHEAD - offset + 1) },
+          (_, i) => offset + i,
+        );
+        const results = await Promise.all(
+          offsets.map(async (n) => {
+            const d = new Date(base);
+            d.setDate(d.getDate() + n);
+            const iso = toLocalISODate(d);
+            const params = new URLSearchParams({
+              salon_id: SALON_ID,
+              service_id: selectedServiceId,
+              date: iso,
+            });
+            try {
+              const res = await apiGet<ApiAvailability>(`/availability?${params}`);
+              return { n, iso, hasSlots: res.slots.length > 0 };
+            } catch {
+              return { n, iso, hasSlots: false };
+            }
+          }),
+        );
+        const earliest = results.filter((r) => r.hasSlots).sort((a, b) => a.n - b.n)[0];
+        if (earliest) {
+          goToDate(earliest.iso);
+          return;
+        }
+      }
+      setNoNextDateFound(true);
+    } finally {
+      setSearchingNextDate(false);
+    }
+  }
 
   const [guestFirstName, setGuestFirstName] = useState("");
   const [guestLastName, setGuestLastName] = useState("");
@@ -310,6 +383,7 @@ export function BookingFlow() {
     }
     setLoadingSlots(true);
     setSelectedSlot(null);
+    setNoNextDateFound(false);
     const params = new URLSearchParams({ salon_id: SALON_ID, service_id: selectedServiceId, date });
     apiGet<ApiAvailability>(`/availability?${params}`)
       .then((res) => setSlots(res.slots))
@@ -344,6 +418,7 @@ export function BookingFlow() {
         payment_method: "transfer",
       });
 
+      haptic([12, 40, 12]);
       setConfirmed(booking);
     } catch (err) {
       if (err instanceof ApiError && err.code === "slot_unavailable") {
@@ -381,9 +456,10 @@ export function BookingFlow() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
-            className="relative flex h-16 w-16 items-center justify-center rounded-full bg-champagne/12"
+            className="relative flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-bubblegum/20 to-champagne/20"
           >
-            <div className="absolute inset-0 animate-ping rounded-full bg-champagne/15" />
+            <ConfettiBurst />
+            <div className="absolute inset-0 animate-ping rounded-full bg-bubblegum/20" />
             <svg viewBox="0 0 24 24" className="h-8 w-8" fill="none">
               <path
                 d="M5 13l4 4L19 7"
@@ -455,7 +531,7 @@ export function BookingFlow() {
             <button
               type="button"
               onClick={loadServices}
-              className="text-sm font-medium text-champagne underline underline-offset-4"
+              className="tap-btn text-sm font-medium text-champagne underline underline-offset-4"
             >
               Reintentar
             </button>
@@ -491,23 +567,26 @@ export function BookingFlow() {
               <motion.button
                 key={service.id}
                 type="button"
-                whileHover={{ y: isSelected ? 0 : -2 }}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => setSelectedServiceId(service.id)}
+                whileHover={{ y: isSelected ? 0 : -3, scale: isSelected ? 1 : 1.01 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => {
+                  haptic();
+                  setSelectedServiceId(service.id);
+                }}
                 className={`relative flex items-center justify-between gap-3 overflow-hidden rounded-[1.4rem] border py-3.5 pl-4 pr-3.5 text-left transition-colors duration-200 ${
                   isSelected
-                    ? "border-champagne/50 bg-champagne/[0.07]"
+                    ? "border-bubblegum/40 bg-bubblegum/[0.06]"
                     : "border-charcoal/8 bg-white hover:border-baby-pink"
                 }`}
                 style={{
                   boxShadow: isSelected
-                    ? "0 10px 24px -12px rgba(189, 154, 86, 0.4)"
-                    : "0 1px 2px rgba(58, 51, 46, 0.04)",
+                    ? "0 10px 24px -12px rgba(255, 111, 160, 0.45)"
+                    : "0 1px 2px rgba(74, 53, 64, 0.04)",
                 }}
               >
                 <motion.span
                   animate={{ opacity: isSelected ? 1 : 0 }}
-                  className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-champagne/0 via-champagne to-champagne/0"
+                  className="absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-bubblegum/0 via-bubblegum to-champagne/0"
                 />
                 <div>
                   <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
@@ -521,7 +600,9 @@ export function BookingFlow() {
                 </div>
                 <div
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                    isSelected ? "border-champagne bg-champagne" : "border-charcoal/15"
+                    isSelected
+                      ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne"
+                      : "border-charcoal/15"
                   }`}
                 >
                   <AnimatePresence>
@@ -572,39 +653,82 @@ export function BookingFlow() {
             </BackLink>
             <SectionHeading>{STEPS[1].heading}</SectionHeading>
 
-            <div className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto rounded-2xl bg-charcoal/[0.03] p-1.5">
-              {days.map((d) => {
-                const isActive = d.iso === date;
-                return (
-                  <button
-                    key={d.iso}
-                    type="button"
-                    onClick={() => setDate(d.iso)}
-                    className="relative shrink-0 rounded-xl px-3 py-2 text-center"
-                  >
-                    {isActive && (
-                      <motion.div
-                        layoutId="date-pill"
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        className="absolute inset-0 rounded-xl bg-white"
-                        style={{ boxShadow: "var(--shadow-soft)" }}
-                      />
-                    )}
-                    <div className="relative flex flex-col items-center">
-                      <span
-                        className={`text-[10px] font-medium uppercase ${isActive ? "text-champagne" : "text-charcoal/40"}`}
+            <div className="mt-4 rounded-2xl bg-charcoal/[0.03] p-3">
+              <div className="flex items-center justify-between px-1">
+                <button
+                  type="button"
+                  disabled={viewDate <= currentMonthStart}
+                  onClick={() => {
+                    haptic(6);
+                    setViewDate((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1));
+                  }}
+                  className="tap-btn flex h-7 w-7 items-center justify-center rounded-full text-charcoal/50 transition-colors hover:bg-white hover:text-charcoal disabled:pointer-events-none disabled:opacity-25"
+                  aria-label="Mes anterior"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+                    <path d="M15 6l-6 6 6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <span className="font-display text-sm text-charcoal">
+                  {capitalize(monthYearFormatter.format(viewDate))}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic(6);
+                    setViewDate((v) => new Date(v.getFullYear(), v.getMonth() + 1, 1));
+                  }}
+                  className="tap-btn flex h-7 w-7 items-center justify-center rounded-full text-charcoal/50 transition-colors hover:bg-white hover:text-charcoal"
+                  aria-label="Mes siguiente"
+                >
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+                    <path d="M9 6l6 6-6 6" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mt-3 grid grid-cols-7 gap-y-1 text-center">
+                {WEEKDAY_HEADERS.map((wd, i) => (
+                  <span key={i} className="text-[10px] font-medium uppercase text-charcoal/35">
+                    {wd}
+                  </span>
+                ))}
+                {monthGrid.map((cell, i) => {
+                  if (!cell) return <div key={`blank-${i}`} />;
+                  const isActive = cell.iso === date;
+                  const isToday = cell.iso === todayISODate();
+                  const isPast = cell.iso < todayISODate();
+                  return (
+                    <div key={cell.iso} className="flex items-center justify-center py-0.5">
+                      <button
+                        type="button"
+                        disabled={isPast}
+                        onClick={() => goToDate(cell.iso)}
+                        className="tap-btn relative flex h-9 w-9 items-center justify-center rounded-full text-sm disabled:pointer-events-none disabled:opacity-25"
                       >
-                        {d.isToday ? "Hoy" : d.weekday}
-                      </span>
-                      <span
-                        className={`font-display text-lg ${isActive ? "text-charcoal" : "text-charcoal/70"}`}
-                      >
-                        {d.day}
-                      </span>
+                        {isActive && (
+                          <motion.div
+                            layoutId="date-pill"
+                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                            className="absolute inset-0 rounded-full bg-gradient-to-br from-bubblegum to-champagne"
+                          />
+                        )}
+                        <span
+                          className={`relative font-display ${
+                            isActive
+                              ? "font-medium text-white"
+                              : isToday
+                                ? "font-medium text-champagne"
+                                : "text-charcoal/75"
+                          }`}
+                        >
+                          {cell.day}
+                        </span>
+                      </button>
                     </div>
-                  </button>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
 
             <div className="mt-5">
@@ -616,9 +740,43 @@ export function BookingFlow() {
                 </div>
               )}
               {!loadingSlots && slots.length === 0 && (
-                <p className="text-sm text-charcoal/45">
-                  No hay turnos disponibles ese día — probá con otra fecha.
-                </p>
+                <div className="flex flex-col items-start gap-2.5">
+                  <p className="text-sm text-charcoal/45">
+                    No hay turnos disponibles ese día — probá con otra fecha.
+                  </p>
+                  {!noNextDateFound && (
+                    <motion.button
+                      whileHover={{ scale: searchingNextDate ? 1 : 1.02 }}
+                      whileTap={{ scale: searchingNextDate ? 1 : 0.98 }}
+                      type="button"
+                      disabled={searchingNextDate}
+                      onClick={goToNextAvailableDate}
+                      className="tap-btn flex items-center gap-1.5 rounded-full border border-champagne/40 bg-champagne/[0.08] px-4 py-2 text-xs font-medium text-charcoal/75 transition-colors hover:border-champagne disabled:opacity-60"
+                    >
+                      {searchingNextDate ? (
+                        "Buscando..."
+                      ) : (
+                        <>
+                          Ir a la próxima fecha disponible
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none">
+                            <path
+                              d="M5 12h14M13 6l6 6-6 6"
+                              stroke="currentColor"
+                              strokeWidth={2}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </>
+                      )}
+                    </motion.button>
+                  )}
+                  {noNextDateFound && (
+                    <p className="text-xs text-charcoal/40">
+                      No encontramos turnos disponibles en los próximos meses.
+                    </p>
+                  )}
+                </div>
               )}
               {!loadingSlots &&
                 groupSlots(slots).map((group) => (
@@ -636,15 +794,19 @@ export function BookingFlow() {
                             initial={{ opacity: 0, y: 6 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.025 }}
+                            whileHover={{ scale: 1.06 }}
                             whileTap={{ scale: 0.95 }}
-                            onClick={() => setSelectedSlot(slot)}
+                            onClick={() => {
+                              haptic();
+                              setSelectedSlot(slot);
+                            }}
                             className="relative rounded-xl text-sm"
                           >
                             {isActive && (
                               <motion.div
                                 layoutId="slot-pill"
                                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                                className="absolute inset-0 rounded-xl bg-champagne"
+                                className="absolute inset-0 rounded-xl bg-gradient-to-br from-bubblegum to-champagne"
                               />
                             )}
                             <span
@@ -714,7 +876,7 @@ export function BookingFlow() {
                     required
                     value={guestFirstName}
                     onChange={(e) => setGuestFirstName(e.target.value)}
-                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                   />
                   <input
                     type="text"
@@ -722,7 +884,7 @@ export function BookingFlow() {
                     required
                     value={guestLastName}
                     onChange={(e) => setGuestLastName(e.target.value)}
-                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                   />
                 </div>
                 <input
@@ -731,14 +893,14 @@ export function BookingFlow() {
                   required
                   value={guestPhone}
                   onChange={(e) => setGuestPhone(e.target.value)}
-                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                 />
                 <input
                   type="email"
                   placeholder="Email (opcional — para sumarlo a tu calendario)"
                   value={guestEmail}
                   onChange={(e) => setGuestEmail(e.target.value)}
-                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                  className="rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
                 />
               </div>
             )}
@@ -755,8 +917,9 @@ export function BookingFlow() {
                   (!guestFirstName.trim() || !guestLastName.trim() || !guestPhone.trim()))
               }
               onClick={handleSubmit}
-              className="group mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-champagne py-3.5
-                text-sm font-medium tracking-wide text-white transition-opacity disabled:opacity-40"
+              className="group mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r
+                from-bubblegum to-champagne py-3.5 text-sm font-medium tracking-wide text-white transition-opacity
+                disabled:opacity-40"
               style={{ boxShadow: submitting ? "none" : "var(--shadow-glow)" }}
             >
               {submitting ? "Reservando..." : "Confirmar reserva"}

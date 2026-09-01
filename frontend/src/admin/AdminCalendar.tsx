@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
 import { useProfile } from "../hooks/useProfileContext";
@@ -352,14 +353,14 @@ export function AdminCalendar() {
             type="button"
             disabled={manageableStaff.length === 0}
             onClick={openCreateGlobal}
-            className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             + Nuevo turno
           </button>
           <button
             type="button"
             onClick={() => setDate((d) => addDaysISO(d, -1))}
-            className="rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
+            className="tap-btn rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
           >
             ← Ayer
           </button>
@@ -367,12 +368,12 @@ export function AdminCalendar() {
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
+            className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
           />
           <button
             type="button"
             onClick={() => setDate((d) => addDaysISO(d, 1))}
-            className="rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
+            className="tap-btn rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
           >
             Mañana →
           </button>
@@ -384,7 +385,7 @@ export function AdminCalendar() {
       {notice && <p className="mt-3 text-sm text-champagne">{notice}</p>}
 
       {isOwner && (
-        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4">
+        <div className="tap-card mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4">
           <p className="text-sm text-charcoal/70">
             Google Calendar:{" "}
             {googleStatus?.connected ? (
@@ -406,7 +407,7 @@ export function AdminCalendar() {
                   type="button"
                   disabled={busy}
                   onClick={() => void syncGoogle()}
-                  className="rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-champagne hover:text-white disabled:opacity-50"
+                  className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
                 >
                   Sincronizar ahora
                 </button>
@@ -414,7 +415,7 @@ export function AdminCalendar() {
                   type="button"
                   disabled={busy}
                   onClick={() => void disconnectGoogle()}
-                  className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 hover:border-charcoal/40 disabled:opacity-50"
+                  className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 hover:border-charcoal/40 disabled:opacity-50"
                 >
                   Desconectar
                 </button>
@@ -424,7 +425,7 @@ export function AdminCalendar() {
                 type="button"
                 disabled={busy}
                 onClick={() => void connectGoogle()}
-                className="rounded-full bg-charcoal px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="tap-btn rounded-full bg-charcoal px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 Conectar Google Calendar
               </button>
@@ -514,7 +515,7 @@ export function AdminCalendar() {
                         onClick={() => openCreate(member.id, slotIndex)}
                         className={`absolute inset-x-0 border-b border-charcoal/5 transition-colors ${
                           working
-                            ? "cursor-pointer hover:bg-champagne/10"
+                            ? "cursor-pointer hover:bg-champagne/10 active:bg-champagne/20"
                             : "cursor-default bg-charcoal/[0.03]"
                         }`}
                         style={{ top: slotIndex * ROW_PX, height: ROW_PX }}
@@ -552,7 +553,7 @@ export function AdminCalendar() {
                         draggable={canManage(booking.staff_id)}
                         onDragStart={(e) => handleDragStart(e, booking)}
                         onClick={() => openEdit(booking)}
-                        className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm ${
+                        className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm transition-[filter,box-shadow] duration-150 hover:z-30 hover:shadow-lg hover:brightness-110 active:brightness-90 ${
                           canManage(booking.staff_id) ? "cursor-grab active:cursor-grabbing" : ""
                         }`}
                         style={{
@@ -575,10 +576,19 @@ export function AdminCalendar() {
       )}
 
       {createSlot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-charcoal/30 p-4">
-          <form
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={() => setCreateSlot(null)}
+          className="fixed inset-0 z-50 flex items-end justify-center bg-charcoal/30 sm:items-center sm:p-4"
+        >
+          <motion.form
+            onClick={(e) => e.stopPropagation()}
+            initial={{ opacity: 0, y: "100%" }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 380, damping: 34 }}
             onSubmit={(e) => void submitCreate(e)}
-            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-lg"
+            className="safe-bottom w-full max-w-sm rounded-t-3xl bg-white p-5 shadow-lg sm:rounded-2xl"
           >
             <h3 className="font-display text-lg text-charcoal">Nuevo turno</h3>
             <p className="mt-1 text-sm capitalize text-charcoal/60">{formatDateLabel(date)}</p>
@@ -591,7 +601,7 @@ export function AdminCalendar() {
               required
               value={createSlot.staffId}
               onChange={(e) => setCreateSlot((f) => f && { ...f, staffId: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             >
               {manageableStaff.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -609,7 +619,7 @@ export function AdminCalendar() {
               required
               value={createSlot.time}
               onChange={(e) => setCreateSlot((f) => f && { ...f, time: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             />
 
             <label className="mt-3 block text-xs text-charcoal/60">Servicio</label>
@@ -617,7 +627,7 @@ export function AdminCalendar() {
               required
               value={createSlot.serviceId}
               onChange={(e) => setCreateSlot((f) => f && { ...f, serviceId: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             >
               {services
                 .filter((s) => s.is_active)
@@ -634,34 +644,34 @@ export function AdminCalendar() {
               value={createSlot.guestName}
               onChange={(e) => setCreateSlot((f) => f && { ...f, guestName: e.target.value })}
               placeholder="Nombre"
-              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+              className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             />
             <input
               type="text"
               value={createSlot.guestPhone}
               onChange={(e) => setCreateSlot((f) => f && { ...f, guestPhone: e.target.value })}
               placeholder="Teléfono"
-              className="mt-2 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+              className="mt-2 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             />
 
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setCreateSlot(null)}
-                className="rounded-full border border-charcoal/20 px-4 py-1.5 text-sm text-charcoal/70"
+                className="tap-btn rounded-full border border-charcoal/20 px-4 py-1.5 text-sm text-charcoal/70"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={busy || !createSlot.serviceId}
-                className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {busy ? "Creando..." : "Crear turno"}
               </button>
             </div>
-          </form>
-        </div>
+          </motion.form>
+        </motion.div>
       )}
 
       {editingBooking && (

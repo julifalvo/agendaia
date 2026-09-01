@@ -92,7 +92,7 @@ export function AdminClosures() {
       {isOwner && (
         <form
           onSubmit={handleSubmit}
-          className="mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4"
+          className="tap-card mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4"
         >
           <div className="flex flex-col gap-1">
             <label className="text-xs text-charcoal/60">Desde</label>
@@ -101,7 +101,7 @@ export function AdminClosures() {
               required
               value={form.startDate}
               onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -112,7 +112,7 @@ export function AdminClosures() {
               value={form.endDate}
               min={form.startDate}
               onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
           <div className="flex flex-1 flex-col gap-1">
@@ -122,13 +122,13 @@ export function AdminClosures() {
               value={form.reason}
               onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))}
               placeholder="Feriado, vacaciones..."
-              className="w-full rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="w-full rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-full bg-baby-pink px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-champagne hover:text-white disabled:opacity-50"
+            className="tap-btn rounded-full bg-baby-pink px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
           >
             {submitting ? "Bloqueando..." : "Bloquear agenda"}
           </button>
@@ -146,7 +146,7 @@ export function AdminClosures() {
         {upcoming.map((closure) => (
           <div
             key={closure.id}
-            className="flex items-center justify-between rounded-2xl border border-charcoal/10 bg-white/60 p-4"
+            className="tap-card flex items-center justify-between rounded-2xl border border-charcoal/10 bg-white/60 p-4"
           >
             <div>
               <p className="text-charcoal">
@@ -160,7 +160,7 @@ export function AdminClosures() {
                 type="button"
                 disabled={busyId === closure.id}
                 onClick={() => void remove(closure.id)}
-                className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
               >
                 Quitar
               </button>

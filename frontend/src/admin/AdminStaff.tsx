@@ -138,7 +138,7 @@ export function AdminStaff() {
 
       <form
         onSubmit={(event) => void handleInvite(event)}
-        className="mt-6 flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 sm:flex-row sm:items-end"
+        className="tap-card mt-6 flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 sm:flex-row sm:items-end"
       >
         <div className="flex-1">
           <label className="text-xs text-charcoal/60" htmlFor="invite-email">
@@ -150,7 +150,7 @@ export function AdminStaff() {
             required
             value={invite.email}
             onChange={(e) => setInvite((prev) => ({ ...prev, email: e.target.value }))}
-            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             placeholder="profesional@ejemplo.com"
           />
         </div>
@@ -164,7 +164,7 @@ export function AdminStaff() {
             required
             value={invite.full_name}
             onChange={(e) => setInvite((prev) => ({ ...prev, full_name: e.target.value }))}
-            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal"
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
             placeholder="Nombre y apellido"
           />
         </div>
@@ -178,7 +178,7 @@ export function AdminStaff() {
             onChange={(e) =>
               setInvite((prev) => ({ ...prev, role: e.target.value as "owner" | "staff" }))
             }
-            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal sm:w-auto"
+            className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne sm:w-auto"
           >
             <option value="staff">Staff</option>
             <option value="owner">Dueña</option>
@@ -187,7 +187,7 @@ export function AdminStaff() {
         <button
           type="submit"
           disabled={inviteBusy}
-          className="rounded-full bg-charcoal px-5 py-2 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="tap-btn rounded-full bg-charcoal px-5 py-2 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {inviteBusy ? "Invitando..." : "Invitar"}
         </button>
@@ -201,7 +201,7 @@ export function AdminStaff() {
         {staff.map((member) => (
           <div
             key={member.id}
-            className={`rounded-2xl border border-baby-pink/30 bg-white/60 p-4 ${
+            className={`tap-card rounded-2xl border border-baby-pink/30 bg-white/60 p-4 ${
               !member.is_active ? "opacity-50" : ""
             }`}
           >
@@ -220,11 +220,11 @@ export function AdminStaff() {
                   value={member.color ?? "#cccccc"}
                   disabled={busyId === member.id}
                   onChange={(e) => void changeColor(member, e.target.value)}
-                  className="h-8 w-8 cursor-pointer rounded-full border border-charcoal/15 bg-white p-0.5 disabled:opacity-50"
+                  className="tap-btn h-8 w-8 cursor-pointer rounded-full border border-charcoal/15 bg-white p-0.5 disabled:opacity-50"
                 />
                 <Link
                   to={`/admin/staff/${member.id}/schedule`}
-                  className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40"
+                  className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40"
                 >
                   Horario
                 </Link>
@@ -232,7 +232,7 @@ export function AdminStaff() {
                   type="button"
                   disabled={busyId === member.id}
                   onClick={() => void toggleActive(member)}
-                  className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                  className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                 >
                   {member.is_active ? "Desactivar" : "Reactivar"}
                 </button>
@@ -240,7 +240,7 @@ export function AdminStaff() {
                   type="button"
                   disabled={busyId === member.id}
                   onClick={() => void deleteForever(member)}
-                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
+                  className="tap-btn rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
                 >
                   Eliminar
                 </button>
@@ -254,7 +254,7 @@ export function AdminStaff() {
                   type="button"
                   disabled={busyId === member.id}
                   onClick={() => void toggleService(member.id, service.id)}
-                  className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
+                  className={`tap-btn rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${
                     isAssigned(member.id, service.id)
                       ? "border-champagne bg-champagne/10 text-champagne"
                       : "border-charcoal/15 text-charcoal/60 hover:border-baby-pink"

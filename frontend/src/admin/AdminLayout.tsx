@@ -1,6 +1,7 @@
 import { NavLink, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
+import { DecorBackground } from "../components/DecorBackground";
 import { LoginPanel } from "../components/LoginPanel";
 import { Logo } from "../components/Logo";
 
@@ -13,10 +14,10 @@ const NAV_LINKS = [
 ];
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
-  return `shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm transition-colors ${
+  return `tap-btn shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm transition-all ${
     isActive
-      ? "bg-baby-pink text-charcoal"
-      : "text-charcoal/60 hover:text-charcoal"
+      ? "bg-gradient-to-r from-bubblegum to-champagne text-white"
+      : "text-charcoal/60 hover:bg-baby-pink/25 hover:text-charcoal"
   }`;
 }
 
@@ -41,7 +42,7 @@ export function AdminLayout() {
         <div className="w-full max-w-sm">
           <LoginPanel onClose={() => {}} />
         </div>
-        <Link to="/" className="text-sm text-charcoal/50 underline-offset-2 hover:underline">
+        <Link to="/" className="tap-btn text-sm text-charcoal/50 underline-offset-2 hover:underline">
           Volver a la página de reservas
         </Link>
       </main>
@@ -54,7 +55,7 @@ export function AdminLayout() {
         <p className="text-charcoal/70">
           Tu cuenta no tiene acceso al panel del salón.
         </p>
-        <Link to="/" className="text-sm text-champagne underline-offset-2 hover:underline">
+        <Link to="/" className="tap-btn text-sm text-champagne underline-offset-2 hover:underline">
           Volver a la página de reservas
         </Link>
       </main>
@@ -62,8 +63,10 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-soft-white">
-      <header className="border-b border-charcoal/10 bg-white/60 backdrop-blur-md">
+    <div className="relative min-h-screen overflow-hidden bg-soft-white">
+      <DecorBackground />
+
+      <header className="safe-top relative border-b border-charcoal/10 bg-white/60 backdrop-blur-md">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3 sm:flex-nowrap sm:justify-between sm:px-6 sm:py-4">
           <div className="flex min-w-0 flex-1 items-center gap-3 sm:flex-none">
             <Logo />
@@ -75,7 +78,7 @@ export function AdminLayout() {
           <button
             type="button"
             onClick={() => void signOut()}
-            className="shrink-0 text-xs text-charcoal/60 underline-offset-2 hover:underline sm:order-3 sm:text-sm"
+            className="tap-btn shrink-0 text-xs text-charcoal/60 underline-offset-2 hover:underline sm:order-3 sm:text-sm"
           >
             Cerrar sesión
           </button>

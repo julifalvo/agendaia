@@ -72,11 +72,11 @@ export function BookingCard({
 
   return (
     <article
-      className={`relative overflow-hidden rounded-2xl border border-charcoal/6 bg-white p-6 transition-transform duration-300 hover:-translate-y-0.5 ${className}`}
+      className={`tap-card relative overflow-hidden rounded-2xl border border-charcoal/6 bg-white p-6 ${className}`}
       style={{ boxShadow: "var(--shadow-soft)" }}
     >
-      {/* Filo superior en champagne: el único acento "de lujo" de la tarjeta. */}
-      <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-champagne/0 via-champagne to-champagne/0" />
+      {/* Filo superior en degradé rosa-dorado: el acento "de marca" de la tarjeta. */}
+      <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-bubblegum/0 via-bubblegum to-champagne" />
 
       <header className="flex items-start justify-between gap-4">
         <div>
@@ -123,7 +123,7 @@ export function BookingCard({
               <button
                 type="button"
                 onClick={() => onCancel(booking.id)}
-                className="rounded-full border border-charcoal/15 px-4 py-1.5 text-sm
+                className="tap-btn rounded-full border border-charcoal/15 px-4 py-1.5 text-sm
                   text-charcoal/60 transition-colors duration-200 hover:border-charcoal/35 hover:text-charcoal"
               >
                 Cancelar
@@ -133,7 +133,7 @@ export function BookingCard({
               <button
                 type="button"
                 onClick={() => onConfirm(booking.id)}
-                className="rounded-full bg-champagne px-4 py-1.5 text-sm font-medium
+                className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium
                   text-white transition-opacity duration-200 hover:opacity-90"
               >
                 Confirmar

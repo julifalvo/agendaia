@@ -7,31 +7,120 @@
   bg-baby-pink, text-charcoal, font-display, shadow-soft, etc.
 */
 @theme {
-  /* Paleta afinada hacia "atelier prestigioso": rosa apagado en vez de rosa
-     caramelo, negro cálido en vez de gris plano, oro antiguo en vez de oro
-     brillante. Mismos nombres de token (menos revisión en cascada), mismos
-     matices de familia — sube de "simpático" a "sofisticado" sin cambiar de
-     marca. Ver BRAND_DESIGN.md. */
-  --color-baby-pink: #ddb2b9;
-  --color-soft-white: #faf6f1;
-  --color-charcoal: #3a332e;
-  --color-champagne: #bd9a56;
+  /* Paleta "cute atelier": rosa vivo tipo candy en vez del rosa apagado
+     anterior, blanco con tibieza rosada, un acento fucsia extra para dar
+     pop a los estados activos/CTAs, y oro más luminoso. Mismos nombres de
+     token que la versión anterior (menos revisión en cascada) + un token
+     nuevo (--color-bubblegum) para el acento dinámico. Ver BRAND_DESIGN.md. */
+  --color-baby-pink: #f9c2d4;
+  --color-soft-white: #fff3f7;
+  --color-charcoal: #4a3540;
+  --color-champagne: #e0a94e;
+  --color-bubblegum: #ff6fa0;
 
   --font-display: "Playfair Display", serif;
   --font-body: "Inter", sans-serif;
 
   /* Sombras con tinte cálido en vez del gris default: es lo que hace que
      una superficie se sienta "de marca" y no un panel de admin genérico. */
-  --shadow-soft: 0 1px 2px rgba(58, 51, 46, 0.05), 0 24px 48px -20px rgba(189, 154, 86, 0.22);
-  --shadow-glow: 0 8px 20px -6px rgba(189, 154, 86, 0.4);
+  --shadow-soft: 0 1px 2px rgba(74, 53, 64, 0.06), 0 24px 48px -18px rgba(255, 111, 160, 0.28);
+  --shadow-glow: 0 8px 22px -6px rgba(255, 111, 160, 0.45);
 }
 
 body {
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(221, 178, 185, 0.16), transparent),
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(249, 194, 212, 0.28), transparent),
     var(--color-soft-white);
   color: var(--color-charcoal);
   font-family: var(--font-body);
+  /* El flash gris nativo de iOS/Android al tocar tapa nuestro propio
+     feedback (.tap-btn/.tap-card); lo sacamos para que se vea el nuestro. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Microinteracción estándar para botones/pills/links clicables: crecen
+   apenas al hover (mouse) y se "aprietan" al tocar/clickear (mouse o dedo,
+   :active dispara con ambos gracias al listener de touchstart en main.tsx)
+   — mismo lenguaje de feedback en toda la app, cliente y paneles internos
+   por igual. `touch-action: manipulation` saca el delay de ~300ms y el
+   double-tap-to-zoom de iOS/Android al tocar repetido (elegir slot tras
+   slot se siente instantáneo). El "apriete" es rápido (0.08s) pero la
+   vuelta usa una curva con rebote (`cubic-bezier` con overshoot) — el
+   "boing" que hace que tocar se sienta juguetón en vez de mecánico. */
+.tap-btn {
+  touch-action: manipulation;
+  transition:
+    transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    color 0.2s ease,
+    opacity 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.tap-btn:hover {
+  transform: scale(1.05);
+}
+
+.tap-btn:active {
+  transform: scale(0.94);
+  transition-duration: 0.08s;
+}
+
+/* Microinteracción para tarjetas/filas/paneles: se despegan levemente al
+   hover con una sombra tibia y rebote sutil, y se "asientan" rápido al
+   tocar — sensación de superficie física, no de bloque estático. */
+.tap-card {
+  touch-action: manipulation;
+  transition:
+    transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.tap-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-soft);
+}
+
+.tap-card:active {
+  transform: translateY(-1px) scale(0.99);
+  transition-duration: 0.08s;
+}
+
+/* En pantallas táctiles (celular/tablet, sin mouse de precisión) los
+   botones/links crecen a la altura mínima recomendada por Apple/Material
+   (44px) — en desktop se quedan compactos como antes, solo afecta touch. */
+@media (pointer: coarse) {
+  a.tap-btn,
+  button.tap-btn {
+    min-height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tap-btn,
+  .tap-card {
+    transition: none;
+  }
+
+  .tap-btn:hover,
+  .tap-btn:active,
+  .tap-card:hover,
+  .tap-card:active {
+    transform: none;
+  }
+}
+
+/* Safe areas de iPhone (notch / home indicator) — sin esto el contenido
+   sticky queda pegado debajo del notch o tapado por la barra de gestos en
+   pantalla completa (PWA agregada al Home Screen). */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Fondo decorativo: dos manchas grandes y muy suaves, a la deriva. Menos es
@@ -58,6 +147,33 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .decor-blob {
     animation: none;
+  }
+}
+
+/* Titileo suave para los sparkles dispersos por el fondo — da sensación de
+   "polvo mágico", el detalle que hace que el fondo se sienta vivo en vez de
+   estático. Cada instancia arranca en un punto distinto del ciclo via
+   animation-delay inline, así no titilan todos en sincro. */
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+    transform: scale(0.85) rotate(0deg);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05) rotate(8deg);
+  }
+}
+
+.sparkle-twinkle {
+  animation: twinkle 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkle-twinkle {
+    animation: none;
+    opacity: 0.5;
   }
 }
 

@@ -1,26 +1,35 @@
 # Brand Design & UI: MC Nails Studio
-**Estética: Elegante, Atelier, Rosa Apagado**
+**Estética: Cute Atelier — tierno, femenino, dinámico**
 
 ## Paleta de Colores
-Afinada desde la versión original (rosa caramelo brillante) hacia tonos más
-sofisticados — misma familia, un paso más cerca de "atelier prestigioso" que
-de "salón simpático". Menos brillo, más profundidad.
+Vuelta a un rosa vivo tipo candy (como el logo `mcstudio.jpg`), dejando atrás
+la versión apagada/"prestigiosa" anterior. Se suma un acento fucsia
+(`bubblegum`) para dar pop a botones y estados activos, sin perder la base
+elegante (serif, glassmorphism, espaciado).
 
-*   **Baby Pink (Primary):** `#DDB2B9` (rosa apagado/dusty rose, no caramelo).
-*   **Soft White (Background):** `#FAF6F1` (crema cálido, no blanco rosado).
-*   **Deep Charcoal (Text/Accents):** `#3A332E` (negro cálido tipo tinta, no gris plano).
-*   **Gold/Champagne (Highlights):** `#BD9A56` (oro antiguo, no oro brillante).
+*   **Baby Pink (Primary):** `#F9C2D4` (rosa candy suave).
+*   **Soft White (Background):** `#FFF3F7` (blanco con tibieza rosada).
+*   **Deep Charcoal (Text/Accents):** `#4A3540` (negro cálido tipo ciruela, no gris plano).
+*   **Gold/Champagne (Highlights):** `#E0A94E` (oro luminoso).
+*   **Bubblegum (Acento dinámico):** `#FF6FA0` (fucsia vivo — CTAs primarios, estados
+    seleccionados, degradés `from-bubblegum to-champagne`).
 
-Ornamentación: con moderación. Los sparkles dispersos por el fondo o
-repetidos en cada palabra de un separador leen "cute" en vez de "prestigioso"
-— se usan como mucho una vez, puntuales. El monograma tipo sello y su versión
-gigante como marca de agua (`DecorBackground`) hacen ese trabajo mejor y sin
-ruido visual.
+Ornamentación: sin miedo a repetir. Sparkles dispersos y titilantes en el
+fondo (`DecorBackground`, clase `.sparkle-twinkle`), sparkle en cada palabra
+del separador (`Marquee`) y en el `Divider`. El monograma tipo sello y su
+versión gigante como marca de agua se mantienen como ancla de marca detrás
+de todo el confeti.
 
 ## Pautas de UI
-1.  **Tipografía:** Usar fuentes *Serif* para títulos (ej. Playfair Display) para dar elegancia, y *Sans-Serif* (ej. Inter o Montserrat) para el cuerpo del texto para legibilidad.
-2.  **Espaciado:** Mucho espacio en blanco (*whitespace*). Diseño tipo "Glassmorphism" sutil en las tarjetas de reserva.
-3.  **Componentes:** Bordes redondeados (`rounded-2xl`), sombras suaves, animaciones de transición ligeras.
+1.  **Tipografía:** Serif para títulos (Playfair Display), Sans-Serif (Inter) para el cuerpo.
+2.  **Espaciado:** Mucho espacio en blanco. Glassmorphism sutil en tarjetas de reserva.
+3.  **Componentes:** Bordes redondeados (`rounded-2xl`/`rounded-full`), sombras con tinte
+    rosa (`--shadow-soft`, `--shadow-glow`), degradés `bubblegum → champagne` en botones
+    y estados primarios (cliente, staff y admin comparten el mismo lenguaje visual).
+4.  **Interactividad:** micro-animaciones con `framer-motion` (hover/tap scale, springs en
+    pills activas), sparkles con titileo (`@keyframes twinkle`), transiciones de color en
+    hover — presente en el flujo de reserva público y en los paneles internos por igual.
 
 ## Implementación Técnica
-*   Configurar `tailwind.config.js` con estos colores personalizados para mantener consistencia en todo el proyecto.
+*   Tokens definidos con `@theme` (Tailwind v4) en `frontend/src/index.css` — cambiar un
+    valor ahí se propaga a toda la app (cliente, staff, admin) sin tocar componentes.

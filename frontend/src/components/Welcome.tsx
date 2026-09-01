@@ -43,7 +43,7 @@ export function Welcome({ onStart }: { onStart: () => void }) {
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: 0.36, ease: "easeOut" }}
-        className="mx-auto mt-6 max-w-[22rem] text-[15px] leading-relaxed text-charcoal/55 lg:max-w-[26rem] lg:text-base"
+        className="mx-auto mt-6 max-w-[22rem] text-[15px] leading-relaxed text-charcoal/60 lg:max-w-[26rem] lg:text-base"
       >
         Tu momento de belleza empieza acá. Elegí tu servicio, tu horario y
         listo — sin vueltas, sin necesidad de crear una cuenta.
@@ -57,12 +57,12 @@ export function Welcome({ onStart }: { onStart: () => void }) {
       >
         <Divider className="mb-7" />
         <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
+          whileHover={{ scale: 1.04, rotate: -1 }}
+          whileTap={{ scale: 0.97, rotate: 0 }}
           type="button"
           onClick={onStart}
-          className="group flex items-center gap-2 rounded-full bg-champagne px-8 py-3.5 text-sm font-medium
-            tracking-wide text-white transition-opacity"
+          className="group flex items-center gap-2 rounded-full bg-gradient-to-r from-bubblegum to-champagne px-8 py-3.5
+            text-sm font-medium tracking-wide text-white transition-opacity"
           style={{ boxShadow: "var(--shadow-glow)" }}
         >
           Reservar turno
@@ -85,7 +85,7 @@ export function Welcome({ onStart }: { onStart: () => void }) {
           href="https://www.instagram.com/mcstudiodebelleza"
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-6 flex items-center gap-1.5 text-xs font-medium text-charcoal/45
+          className="tap-btn mt-6 flex items-center gap-1.5 text-xs font-medium text-charcoal/45
             underline-offset-4 transition-colors hover:text-champagne hover:underline"
         >
           <InstagramIcon className="h-3.5 w-3.5" />

@@ -116,7 +116,7 @@ export function AdminServices() {
 
       <form
         onSubmit={handleSubmit}
-        className="mt-6 flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4"
+        className="tap-card mt-6 flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4"
       >
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex flex-col gap-1">
@@ -126,7 +126,7 @@ export function AdminServices() {
               required
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -138,7 +138,7 @@ export function AdminServices() {
               required
               value={form.duration_minutes}
               onChange={(e) => setForm((f) => ({ ...f, duration_minutes: e.target.value }))}
-              className="w-28 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="w-28 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -150,7 +150,7 @@ export function AdminServices() {
               required
               value={form.price}
               onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
-              className="w-32 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none focus:border-champagne"
+              className="w-32 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
             />
           </div>
         </div>
@@ -170,7 +170,7 @@ export function AdminServices() {
           <button
             type="submit"
             disabled={submitting}
-            className="rounded-full bg-baby-pink px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-champagne hover:text-white disabled:opacity-50"
+            className="tap-btn rounded-full bg-baby-pink px-4 py-2 text-sm font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
           >
             {submitting ? "Guardando..." : editingId ? "Guardar cambios" : "Agregar servicio"}
           </button>
@@ -178,7 +178,7 @@ export function AdminServices() {
             <button
               type="button"
               onClick={cancelEdit}
-              className="rounded-full border border-charcoal/20 px-4 py-2 text-sm text-charcoal/70 transition-colors hover:border-charcoal/40"
+              className="tap-btn rounded-full border border-charcoal/20 px-4 py-2 text-sm text-charcoal/70 transition-colors hover:border-charcoal/40"
             >
               Cancelar
             </button>
@@ -193,7 +193,7 @@ export function AdminServices() {
         {services.map((service) => (
           <div
             key={service.id}
-            className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-charcoal/10 bg-white/60 p-4 ${
+            className={`tap-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-charcoal/10 bg-white/60 p-4 ${
               !service.is_active ? "opacity-50" : ""
             }`}
           >
@@ -212,7 +212,7 @@ export function AdminServices() {
                 type="button"
                 disabled={busyId === service.id}
                 onClick={() => startEdit(service)}
-                className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
               >
                 Editar
               </button>
@@ -220,7 +220,7 @@ export function AdminServices() {
                 type="button"
                 disabled={busyId === service.id}
                 onClick={() => void toggleActive(service)}
-                className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
               >
                 {service.is_active ? "Dar de baja" : "Reactivar"}
               </button>
@@ -228,7 +228,7 @@ export function AdminServices() {
                 type="button"
                 disabled={busyId === service.id}
                 onClick={() => void deleteForever(service)}
-                className="rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
+                className="tap-btn rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
               >
                 Eliminar
               </button>

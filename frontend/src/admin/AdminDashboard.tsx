@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet, ApiError } from "../lib/api";
+import { haptic } from "../lib/haptics";
 import { cancelBooking as cancelBookingAction, setBookingPaymentStatus, transitionBooking } from "./bookingActions";
 import { BookingEditModal } from "./BookingEditModal";
 import { PAYMENT_LABEL, PAYMENT_STYLE, STATUS_LABEL, STATUS_STYLE, todayISODate } from "./bookingLabels";
@@ -55,6 +56,7 @@ export function AdminDashboard() {
   );
 
   async function transition(id: string, status: AppointmentStatus) {
+    haptic();
     setBusyId(id);
     try {
       await transitionBooking(id, status);
@@ -79,6 +81,7 @@ export function AdminDashboard() {
   }
 
   async function setPaymentStatus(id: string, paymentStatus: PaymentStatus) {
+    haptic();
     setBusyId(id);
     try {
       await setBookingPaymentStatus(id, paymentStatus);
@@ -98,7 +101,7 @@ export function AdminDashboard() {
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
-          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none focus:border-champagne"
+          className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
         />
       </div>
 
@@ -119,7 +122,7 @@ export function AdminDashboard() {
           return (
             <article
               key={booking.id}
-              className="flex flex-wrap items-center gap-4 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 shadow-sm backdrop-blur-md"
+              className="tap-card flex flex-wrap items-center gap-4 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 shadow-sm backdrop-blur-md"
             >
               <div className="w-20 shrink-0">
                 <p className="font-display text-lg text-charcoal">
@@ -156,7 +159,7 @@ export function AdminDashboard() {
                     type="button"
                     disabled={isBusy}
                     onClick={() => void setPaymentStatus(booking.id, "pending")}
-                    className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                    className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                   >
                     Deshacer seña recibida
                   </button>
@@ -165,7 +168,7 @@ export function AdminDashboard() {
                     type="button"
                     disabled={isBusy}
                     onClick={() => void setPaymentStatus(booking.id, "paid")}
-                    className="rounded-full bg-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     Marcar seña recibida
                   </button>
@@ -175,7 +178,7 @@ export function AdminDashboard() {
                     type="button"
                     disabled={isBusy}
                     onClick={() => void transition(booking.id, "confirmed")}
-                    className="rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-champagne hover:text-white disabled:opacity-50"
+                    className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
                   >
                     Confirmar
                   </button>
@@ -186,7 +189,7 @@ export function AdminDashboard() {
                       type="button"
                       disabled={isBusy}
                       onClick={() => void transition(booking.id, "completed")}
-                      className="rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-champagne hover:text-white disabled:opacity-50"
+                      className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
                     >
                       Completar
                     </button>
@@ -194,7 +197,7 @@ export function AdminDashboard() {
                       type="button"
                       disabled={isBusy}
                       onClick={() => void transition(booking.id, "no_show")}
-                      className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                      className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                     >
                       No asistió
                     </button>
@@ -206,7 +209,7 @@ export function AdminDashboard() {
                       type="button"
                       disabled={isBusy}
                       onClick={() => setEditingBooking(booking)}
-                      className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                      className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                     >
                       Editar horario
                     </button>
@@ -214,7 +217,7 @@ export function AdminDashboard() {
                       type="button"
                       disabled={isBusy}
                       onClick={() => void cancel(booking.id)}
-                      className="rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                      className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
                     >
                       Cancelar
                     </button>

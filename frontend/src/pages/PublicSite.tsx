@@ -18,7 +18,7 @@ function TopBar() {
   const isStaff = profile?.role === "owner" || profile?.role === "staff";
 
   return (
-    <div className="sticky top-0 z-20 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
+    <div className="safe-top sticky top-0 z-20 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
       <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3 sm:px-6 lg:max-w-5xl lg:px-10 lg:py-4">
         <Logo />
 
@@ -26,7 +26,7 @@ function TopBar() {
           <div className="flex items-center gap-3 text-xs">
             <Link
               to="/admin"
-              className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
+              className="tap-btn text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
             >
               Panel del salón
             </Link>
@@ -34,7 +34,7 @@ function TopBar() {
               <button
                 type="button"
                 onClick={() => void signOut()}
-                className="text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
+                className="tap-btn text-charcoal/50 underline-offset-4 hover:text-charcoal hover:underline"
               >
                 Cerrar sesión
               </button>
@@ -57,9 +57,9 @@ function Hero() {
         MC Nails Studio
       </p>
       <h1 className="mt-3 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal lg:text-[3.4rem]">
-        Uñas impecables,
+        Uñas lindas,
         <br />
-        <span className="italic text-champagne">a tu medida.</span>
+        <span className="italic text-bubblegum">a tu manera.</span>
       </h1>
       <p className="mx-auto mt-4 max-w-[26rem] text-sm text-charcoal/55 lg:text-base">
         Reservá tu turno en minutos, sin vueltas ni necesidad de crear una cuenta.
@@ -105,12 +105,21 @@ function BrandPanel() {
         href="https://www.instagram.com/mcstudiodebelleza"
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-10 flex items-center gap-1.5 text-xs font-medium text-charcoal/50
+        className="tap-btn mt-10 flex items-center gap-1.5 text-xs font-medium text-charcoal/50
           underline-offset-4 transition-colors hover:text-champagne hover:underline"
       >
         <InstagramIcon className="h-3.5 w-3.5" />
         Mirá los diseños en Instagram
       </a>
+
+      <div className="mt-3 flex items-center gap-3 text-[11px] text-charcoal/40">
+        <Link to="/privacidad" className="tap-btn underline-offset-4 hover:text-champagne hover:underline">
+          Privacidad
+        </Link>
+        <Link to="/terminos" className="tap-btn underline-offset-4 hover:text-champagne hover:underline">
+          Términos
+        </Link>
+      </div>
     </div>
   );
 }
@@ -157,7 +166,7 @@ export function PublicSite() {
                   <Divider className="mb-6 lg:hidden" />
 
                   <div
-                    className="rounded-[2rem] border border-white/60 bg-white/70 p-6 backdrop-blur-xl sm:p-8"
+                    className="rounded-[2rem] border border-baby-pink/40 bg-white/75 p-6 backdrop-blur-xl sm:p-8"
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
                     <BookingFlow />
@@ -172,7 +181,7 @@ export function PublicSite() {
                   href="https://www.instagram.com/mcstudiodebelleza"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-xs font-medium text-charcoal/50
+                  className="tap-btn flex items-center gap-1.5 text-xs font-medium text-charcoal/50
                     underline-offset-4 transition-colors hover:text-champagne hover:underline lg:hidden"
                 >
                   <InstagramIcon className="h-3.5 w-3.5" />
@@ -182,6 +191,15 @@ export function PublicSite() {
                 <p className="text-center text-xs tracking-wide text-charcoal/35">
                   MC NAILS STUDIO · hecho con cariño para tus uñas
                 </p>
+
+                <div className="flex items-center gap-3 text-[11px] text-charcoal/40">
+                  <Link to="/privacidad" className="tap-btn underline-offset-4 hover:text-champagne hover:underline">
+                    Privacidad
+                  </Link>
+                  <Link to="/terminos" className="tap-btn underline-offset-4 hover:text-champagne hover:underline">
+                    Términos
+                  </Link>
+                </div>
               </footer>
             </div>
           </motion.div>
