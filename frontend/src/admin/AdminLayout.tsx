@@ -7,6 +7,7 @@ import { Logo } from "../components/Logo";
 
 const NAV_LINKS = [
   { to: "/admin", label: "Agenda", end: true },
+  { to: "/admin/my-bookings", label: "Mis turnos" },
   { to: "/admin/calendar", label: "Calendario" },
   { to: "/admin/services", label: "Servicios" },
   { to: "/admin/staff", label: "Staff" },

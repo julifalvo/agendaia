@@ -6,6 +6,7 @@ import { PrivacyPolicy } from "./pages/PrivacyPolicy";
 import { TermsOfService } from "./pages/TermsOfService";
 import { AdminLayout } from "./admin/AdminLayout";
 import { AdminDashboard } from "./admin/AdminDashboard";
+import { AdminMyBookings } from "./admin/AdminMyBookings";
 import { AdminCalendar } from "./admin/AdminCalendar";
 import { AdminServices } from "./admin/AdminServices";
 import { AdminStaff } from "./admin/AdminStaff";
@@ -22,6 +23,7 @@ export default function App() {
           <Route path="/terminos" element={<TermsOfService />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
+            <Route path="my-bookings" element={<AdminMyBookings />} />
             <Route path="calendar" element={<AdminCalendar />} />
             <Route path="services" element={<AdminServices />} />
             <Route path="staff" element={<AdminStaff />} />
