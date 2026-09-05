@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
 import { useProfile } from "../hooks/useProfileContext";
 import type { ApiSalonClosure } from "../types/api";
+import { todayISODate } from "./bookingLabels";
 
 const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   day: "2-digit",
@@ -10,10 +11,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-AR", {
   hour: "2-digit",
   minute: "2-digit",
 });
-
-function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 const EMPTY_FORM = { startDate: todayISODate(), endDate: todayISODate(), reason: "" };
 

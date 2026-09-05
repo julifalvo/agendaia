@@ -2,14 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiGet, apiPut, ApiError } from "../lib/api";
 import type { ApiScheduleBlock, ScheduleBlockInput } from "../types/api";
+import { todayISODate } from "./bookingLabels";
 
 interface Row {
   start_time: string;
   end_time: string;
-}
-
-function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 function addDaysISO(iso: string, days: number): string {

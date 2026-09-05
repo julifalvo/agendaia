@@ -35,8 +35,18 @@ export const PAYMENT_STYLE: Record<PaymentStatus, string> = {
   paid: "bg-green-50 text-green-700",
 };
 
+/** Fecha local en formato YYYY-MM-DD. `toISOString()` convierte a UTC
+ * primero, así que cerca de medianoche en Argentina (UTC-3) devolvería el
+ * día siguiente; esto arma la fecha a partir de los componentes locales. */
+export function toLocalISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function todayISODate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalISODate(new Date());
 }
 
 export function toLocalDateInput(iso: string): string {
