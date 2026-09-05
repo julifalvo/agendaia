@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
@@ -84,7 +84,17 @@ export function AdminCalendar() {
 
   const [createSlot, setCreateSlot] = useState<CreateForm | null>(null);
   const [editingBooking, setEditingBooking] = useState<ApiBooking | null>(null);
-  const [dragOverStaffId, setDragOverStaffId] = useState<string | null>(null);
+  // Reprogramar por arrastre con Pointer Events (no HTML5 drag-and-drop, que
+  // no dispara en pantallas táctiles) — funciona igual con mouse y con dedo.
+  const [drag, setDrag] = useState<{ booking: ApiBooking; staffId: string; slotIndex: number } | null>(
+    null,
+  );
+  const pendingDragRef = useRef<{ booking: ApiBooking; pointerId: number; x: number; y: number } | null>(
+    null,
+  );
+  // true una vez que el gesto se convirtió en drag real: el click sintético
+  // que sigue al pointerup en touch se ignora mientras esto sea true.
+  const dragMovedRef = useRef(false);
 
   const isOwner = profile?.role === "owner";
   const activeStaff = useMemo(() => staff.filter((s) => s.is_active), [staff]);
@@ -254,28 +264,14 @@ export function AdminCalendar() {
     setEditingBooking(booking);
   }
 
-  function handleDragStart(event: DragEvent<HTMLButtonElement>, booking: ApiBooking) {
-    if (!canManage(booking.staff_id)) {
-      event.preventDefault();
-      return;
-    }
-    event.dataTransfer.setData("text/plain", booking.id);
-    event.dataTransfer.effectAllowed = "move";
+  function currentSlotIndex(booking: ApiBooking): number {
+    return Math.round((localMinutesSinceMidnight(booking.start_time) - DAY_START_MIN) / SLOT_MIN);
   }
 
-  async function handleDrop(event: DragEvent<HTMLDivElement>, staffId: string) {
-    event.preventDefault();
-    setDragOverStaffId(null);
-    if (!canManage(staffId)) return;
-    const bookingId = event.dataTransfer.getData("text/plain");
-    const booking = bookings.find((b) => b.id === bookingId);
-    if (!booking || !canManage(booking.staff_id)) return;
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    const rawMinutes = DAY_START_MIN + (event.clientY - rect.top) / PX_PER_MIN;
-    const snapped = Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN;
-    const slotIndex = (snapped - DAY_START_MIN) / SLOT_MIN;
+  async function commitReschedule(booking: ApiBooking, staffId: string, slotIndex: number) {
+    if (!canManage(staffId) || !canManage(booking.staff_id)) return;
     if (slotIndex < 0 || slotIndex >= SLOT_COUNT || !isWorking(staffId, slotIndex)) return;
+    const snapped = DAY_START_MIN + slotIndex * SLOT_MIN;
     if (snapped === localMinutesSinceMidnight(booking.start_time) && staffId === booking.staff_id) return;
 
     setBusy(true);
@@ -289,6 +285,64 @@ export function AdminCalendar() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleBookingPointerDown(event: PointerEvent<HTMLButtonElement>, booking: ApiBooking) {
+    if (!canManage(booking.staff_id)) return;
+    // Progressive enhancement: si el navegador no soporta pointer capture,
+    // el drag sigue funcionando vía elementFromPoint, solo es menos robusto
+    // si el dedo sale de los límites del botón.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    pendingDragRef.current = { booking, pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    dragMovedRef.current = false;
+  }
+
+  function handleBookingPointerMove(event: PointerEvent<HTMLButtonElement>) {
+    const pending = pendingDragRef.current;
+    if (!pending || pending.pointerId !== event.pointerId) return;
+
+    if (!dragMovedRef.current) {
+      const dx = event.clientX - pending.x;
+      const dy = event.clientY - pending.y;
+      // Umbral chico para no confundir un tap con un drag apenas empieza.
+      if (Math.hypot(dx, dy) < 6) return;
+      dragMovedRef.current = true;
+      setDrag({
+        booking: pending.booking,
+        staffId: pending.booking.staff_id,
+        slotIndex: currentSlotIndex(pending.booking),
+      });
+    }
+
+    const target = document.elementFromPoint(event.clientX, event.clientY);
+    const column = target?.closest<HTMLElement>("[data-staff-col]");
+    if (!column) return;
+    const staffId = column.dataset.staffCol!;
+    const rect = column.getBoundingClientRect();
+    const rawMinutes = DAY_START_MIN + (event.clientY - rect.top) / PX_PER_MIN;
+    const snapped = Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN;
+    const slotIndex = Math.min(Math.max((snapped - DAY_START_MIN) / SLOT_MIN, 0), SLOT_COUNT - 1);
+    setDrag((d) => (d ? { ...d, staffId, slotIndex } : d));
+  }
+
+  async function handleBookingPointerUp(event: PointerEvent<HTMLButtonElement>) {
+    const pending = pendingDragRef.current;
+    if (!pending || pending.pointerId !== event.pointerId) return;
+    pendingDragRef.current = null;
+
+    if (dragMovedRef.current && drag) {
+      const finalDrag = drag;
+      setDrag(null);
+      await commitReschedule(finalDrag.booking, finalDrag.staffId, finalDrag.slotIndex);
+    }
+  }
+
+  function handleBookingPointerCancel(event: PointerEvent<HTMLButtonElement>) {
+    const pending = pendingDragRef.current;
+    if (!pending || pending.pointerId !== event.pointerId) return;
+    pendingDragRef.current = null;
+    dragMovedRef.current = false;
+    setDrag(null);
   }
 
   async function connectGoogle() {
@@ -454,8 +508,18 @@ export function AdminCalendar() {
         <p className="mt-6 text-sm text-charcoal/50">No hay profesionales activos.</p>
       )}
 
+      {!loading && activeStaff.length > 1 && (
+        <p className="mt-6 text-xs text-charcoal/40 sm:hidden">
+          Deslizá para ver el resto de las profesionales →
+        </p>
+      )}
+
       {!loading && activeStaff.length > 0 && (
-        <div className="mt-6 flex overflow-x-auto rounded-2xl border border-baby-pink/30 bg-white/60 p-4">
+        <div
+          className={`flex overflow-x-auto rounded-2xl border border-baby-pink/30 bg-white/60 p-4 ${
+            activeStaff.length > 1 ? "mt-2" : "mt-6"
+          }`}
+        >
           <div className="shrink-0" style={{ width: 56 }}>
             <div style={{ height: 24 }} />
             <div className="relative" style={{ height: GRID_HEIGHT_PX }}>
@@ -492,18 +556,11 @@ export function AdminCalendar() {
                   {member.full_name}
                 </div>
                 <div
+                  data-staff-col={member.id}
                   className={`relative transition-colors ${
-                    dragOverStaffId === member.id ? "bg-champagne/10" : ""
+                    drag?.staffId === member.id ? "bg-champagne/10" : ""
                   }`}
                   style={{ height: GRID_HEIGHT_PX }}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverStaffId(member.id);
-                  }}
-                  onDragLeave={() =>
-                    setDragOverStaffId((id) => (id === member.id ? null : id))
-                  }
-                  onDrop={(e) => void handleDrop(e, member.id)}
                 >
                   {Array.from({ length: SLOT_COUNT }).map((_, slotIndex) => {
                     const working = isWorking(member.id, slotIndex);
@@ -546,13 +603,22 @@ export function AdminCalendar() {
                     const clientLabel = booking.client_name ?? booking.guest_name ?? "Cliente";
                     const top = (localMinutesSinceMidnight(booking.start_time) - DAY_START_MIN) * PX_PER_MIN;
                     const height = Math.max(booking.duration_minutes * PX_PER_MIN, 18);
+                    const isBeingDragged = drag?.booking.id === booking.id;
                     return (
                       <button
                         key={booking.id}
                         type="button"
-                        draggable={canManage(booking.staff_id)}
-                        onDragStart={(e) => handleDragStart(e, booking)}
-                        onClick={() => openEdit(booking)}
+                        onPointerDown={(e) => handleBookingPointerDown(e, booking)}
+                        onPointerMove={handleBookingPointerMove}
+                        onPointerUp={(e) => void handleBookingPointerUp(e)}
+                        onPointerCancel={handleBookingPointerCancel}
+                        onClick={() => {
+                          if (dragMovedRef.current) {
+                            dragMovedRef.current = false;
+                            return;
+                          }
+                          openEdit(booking);
+                        }}
                         className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm transition-[filter,box-shadow] duration-150 hover:z-30 hover:shadow-lg hover:brightness-110 active:brightness-90 ${
                           canManage(booking.staff_id) ? "cursor-grab active:cursor-grabbing" : ""
                         }`}
@@ -560,7 +626,8 @@ export function AdminCalendar() {
                           top,
                           height,
                           backgroundColor: member.color ?? "#999999",
-                          opacity: booking.status === "no_show" ? 0.5 : 1,
+                          opacity: isBeingDragged ? 0.35 : booking.status === "no_show" ? 0.5 : 1,
+                          touchAction: canManage(booking.staff_id) ? "none" : undefined,
                         }}
                       >
                         <p className="truncate font-medium">{service?.name ?? "Turno"}</p>
@@ -568,6 +635,16 @@ export function AdminCalendar() {
                       </button>
                     );
                   })}
+
+                  {drag && drag.staffId === member.id && (
+                    <div
+                      className="pointer-events-none absolute inset-x-0.5 z-30 rounded-lg border-2 border-dashed border-champagne bg-champagne/20"
+                      style={{
+                        top: drag.slotIndex * ROW_PX,
+                        height: Math.max(drag.booking.duration_minutes * PX_PER_MIN, 18),
+                      }}
+                    />
+                  )}
                 </div>
               </div>
             ))}

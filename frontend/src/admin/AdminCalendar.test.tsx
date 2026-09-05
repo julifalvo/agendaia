@@ -12,6 +12,11 @@ import { AdminCalendar } from "./AdminCalendar";
  * real la impone el backend (`_authorize_mutation`); esto prueba que la UI
  * respeta el mismo límite en vez de ofrecer una acción que el backend va a
  * rechazar.
+ *
+ * El reprogramado por arrastre usa Pointer Events (no HTML5 drag-and-drop,
+ * que no dispara en touch) — jsdom no hace layout real, así que
+ * `document.elementFromPoint` (con el que el componente detecta sobre qué
+ * columna está el dedo/mouse) se mockea para devolver la columna elegida.
  */
 
 const mockUseProfile = vi.fn();
@@ -34,16 +39,19 @@ vi.mock("../lib/api", () => ({
   },
 }));
 
-/** Fake mínimo de DataTransfer — jsdom no lo implementa. */
-function createDataTransfer() {
-  let payload = "";
-  return {
-    setData: (_type: string, value: string) => {
-      payload = value;
-    },
-    getData: () => payload,
-    effectAllowed: "",
-  };
+/** Simula un drag completo con Pointer Events sobre `button`, haciendo que
+ * `document.elementFromPoint` (no implementado en jsdom) devuelva `targetColumn`
+ * durante el gesto. */
+function dragTo(button: HTMLElement, targetColumn: HTMLElement, clientY = 100) {
+  const originalElementFromPoint = document.elementFromPoint;
+  document.elementFromPoint = (() => targetColumn) as typeof document.elementFromPoint;
+  try {
+    fireEvent.pointerDown(button, { pointerId: 1, clientX: 0, clientY: 0 });
+    fireEvent.pointerMove(button, { pointerId: 1, clientX: 0, clientY });
+    fireEvent.pointerUp(button, { pointerId: 1, clientX: 0, clientY });
+  } finally {
+    document.elementFromPoint = originalElementFromPoint;
+  }
 }
 
 const STAFF_1 = {
@@ -279,14 +287,55 @@ describe("AdminCalendar", () => {
     const otherColumnSlot = screen.getAllByLabelText("Crear turno 09:00")[0]; // columna de staff-1
     const otherColumn = otherColumnSlot.parentElement!;
 
-    const dataTransfer = createDataTransfer();
-    fireEvent.dragStart(ownBookingButton, { dataTransfer });
-    fireEvent.dragOver(otherColumn, { dataTransfer });
-    fireEvent.drop(otherColumn, { dataTransfer, clientY: 100 });
+    dragTo(ownBookingButton, otherColumn);
 
     expect(apiPostMock).not.toHaveBeenCalledWith(
       expect.stringContaining("/reschedule"),
       expect.anything(),
+    );
+  });
+
+  it("un staff puede arrastrar un turno propio a otro horario dentro de su misma columna", async () => {
+    const OWN_BOOKING = { ...BOOKING, id: "b2", staff_id: "staff-2", guest_name: "Camila" };
+    apiGetMock.mockImplementation(async (path: string) => {
+      if (path === "/staff") return [STAFF_1, STAFF_2];
+      if (path === "/services/mine") return [SERVICE];
+      if (path.startsWith("/bookings?")) return [OWN_BOOKING];
+      if (path.startsWith("/salon/closures")) return [];
+      if (path.startsWith("/admin/google-calendar/blocks")) return [];
+      const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)/.exec(path);
+      if (scheduleMatch) return workingBlock(scheduleMatch[1]);
+      throw new Error(`apiGet no mockeado para: ${path}`);
+    });
+    apiPostMock.mockResolvedValue(OWN_BOOKING);
+    mockUseProfile.mockReturnValue({
+      profile: {
+        id: "staff-2",
+        salon_id: "s1",
+        full_name: "Beatriz",
+        role: "staff",
+        is_active: true,
+        color: "#0000ff",
+        email: null,
+        phone: null,
+      },
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderCalendar();
+
+    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
+    const ownColumnSlot = screen.getAllByLabelText("Crear turno 09:00")[1]; // columna de staff-2
+    const ownColumn = ownColumnSlot.parentElement!;
+
+    dragTo(ownBookingButton, ownColumn, 300); // suficientemente lejos del horario original
+
+    await waitFor(() =>
+      expect(apiPostMock).toHaveBeenCalledWith(
+        expect.stringContaining("/reschedule"),
+        expect.objectContaining({ staff_id: "staff-2" }),
+      ),
     );
   });
 });
