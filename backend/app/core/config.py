@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     # app/services/email.py. Vacío = no-op (mismo criterio que Mercado Pago).
     resend_api_key: str = ""
     #: Remitente. "onboarding@resend.dev" funciona sin verificar dominio
-    #: propio — sirve para arrancar, pero Resend lo puede marcar como spam
-    #: más seguido que un dominio propio verificado.
+    #: propio — sirve para arrancar, pero mientras no se verifique un
+    #: dominio propio, Resend solo entrega al mail con el que se creó la
+    #: cuenta (no a las clientas ni, salvo que coincida, a la profesional).
     resend_from_email: str = "onboarding@resend.dev"
 
     # Google Calendar (OAuth) — sync bidireccional del calendario del salón,

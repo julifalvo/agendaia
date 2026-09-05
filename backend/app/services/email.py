@@ -14,7 +14,7 @@ import logging
 import httpx
 
 from app.core.config import get_settings
-from app.db.models import Appointment
+from app.db.models import Appointment, Profile
 from app.services.calendar import build_booking_ics
 
 logger = logging.getLogger(__name__)
@@ -68,4 +68,62 @@ async def send_booking_confirmation(appointment: Appointment, service_name: str)
     except httpx.HTTPError:
         logger.exception(
             "No se pudo mandar el mail de confirmación del turno %s", appointment.id
+        )
+
+
+async def send_staff_notification(
+    appointment: Appointment, service_name: str, staff: Profile
+) -> None:
+    """Avisa por mail a la profesional asignada que le agendaron un turno.
+
+    Mismo criterio "fire and forget" que send_booking_confirmation: no-op
+    silencioso si la profesional no tiene email cargado o Resend no está
+    configurado, y nunca propaga una excepción.
+
+    Nota: mientras la cuenta de Resend siga en modo sandbox (sin dominio
+    propio verificado), Resend solo entrega a la casilla con la que se creó
+    la cuenta — si esa casilla es la de la profesional, este mail le llega;
+    el de confirmación a la clienta (arriba) seguirá sin poder salir hasta
+    que se verifique un dominio propio.
+    """
+    settings = get_settings()
+    if not staff.email or not settings.resend_api_key:
+        return
+
+    client_label = appointment.client_name or appointment.guest_name or "Un cliente"
+    ics = build_booking_ics(appointment, service_name, settings.resend_from_email)
+    greeting = f" {staff.full_name}" if staff.full_name else ""
+    body = {
+        "from": f"MC Nails Studio <{settings.resend_from_email}>",
+        "to": [staff.email],
+        "subject": f"Nuevo turno: {service_name} con {client_label}",
+        "html": (
+            f"<p>¡Hola{greeting}!</p>"
+            f"<p><strong>{client_label}</strong> reservó <strong>{service_name}</strong> "
+            "con vos. Te adjuntamos el evento para que lo sumes a tu calendario.</p>"
+        ),
+        "attachments": [
+            {
+                "filename": "turno-mc-nails-studio.ics",
+                "content": base64.b64encode(ics.encode("utf-8")).decode("ascii"),
+            }
+        ],
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            response = await client.post(
+                "https://api.resend.com/emails",
+                json=body,
+                headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+            )
+        if response.status_code >= 400:
+            logger.warning(
+                "Resend rechazó la notificación a la profesional del turno %s: %s",
+                appointment.id,
+                response.text,
+            )
+    except httpx.HTTPError:
+        logger.exception(
+            "No se pudo notificar a la profesional del turno %s", appointment.id
         )

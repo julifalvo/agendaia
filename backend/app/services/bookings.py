@@ -285,10 +285,13 @@ async def create_booking(
         raise domain_error from exc
 
     await session.refresh(appointment)
+    await attach_client_name(session, appointment)
     await notifications.notify("booking.created", appointment)
     await email.send_booking_confirmation(appointment, service.name)
+    staff_profile = await session.get(Profile, staff_id)
+    if staff_profile is not None:
+        await email.send_staff_notification(appointment, service.name, staff_profile)
     await google_calendar.push_appointment_created(session, appointment, service.name)
-    await attach_client_name(session, appointment)
 
     # `mp_init_point` no es una columna: es la URL de checkout que el
     # frontend necesita para redirigir, generada acá mismo así el cliente no
