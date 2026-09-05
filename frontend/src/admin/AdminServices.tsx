@@ -270,18 +270,18 @@ export function AdminServices() {
             <p className="text-xs text-charcoal/45">Todavía no creaste categorías.</p>
           )}
         </div>
-        <form onSubmit={handleAddCategory} className="mt-3 flex gap-2">
+        <form onSubmit={handleAddCategory} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             type="text"
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
             placeholder="Nueva categoría (p. ej. Uñas, Peluquería)"
-            className="w-64 rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
+            className="w-full rounded-xl border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne sm:w-64"
           />
           <button
             type="submit"
             disabled={categorySubmitting || !newCategoryName.trim()}
-            className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+            className="tap-btn self-start rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
           >
             Agregar
           </button>

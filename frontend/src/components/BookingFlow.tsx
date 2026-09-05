@@ -1128,7 +1128,7 @@ export function BookingFlow() {
                               />
                             )}
                             <span
-                              className={`relative block rounded-xl border px-2 py-2 text-center tabular-nums ${
+                              className={`relative block rounded-xl border px-2 py-2.5 text-center tabular-nums ${
                                 isActive
                                   ? "border-transparent font-medium text-white"
                                   : "border-charcoal/10 text-charcoal/80"
@@ -1189,14 +1189,14 @@ export function BookingFlow() {
 
             {bookingAsGuest && (
               <div className="mt-5 flex flex-col gap-2.5">
-                <div className="flex gap-2.5">
+                <div className="flex flex-col gap-2.5 sm:flex-row">
                   <input
                     type="text"
                     placeholder="Nombre"
                     required
                     value={guestFirstName}
                     onChange={(e) => setGuestFirstName(e.target.value)}
-                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    className="w-full rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10 sm:w-1/2"
                   />
                   <input
                     type="text"
@@ -1204,7 +1204,7 @@ export function BookingFlow() {
                     required
                     value={guestLastName}
                     onChange={(e) => setGuestLastName(e.target.value)}
-                    className="w-1/2 rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10"
+                    className="w-full rounded-xl border border-charcoal/12 bg-white px-4 py-2.5 text-sm text-charcoal outline-none transition-all hover:border-baby-pink focus:border-champagne focus:ring-4 focus:ring-champagne/10 sm:w-1/2"
                   />
                 </div>
                 <input

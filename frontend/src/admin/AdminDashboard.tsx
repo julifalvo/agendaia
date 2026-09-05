@@ -122,38 +122,42 @@ export function AdminDashboard() {
           return (
             <article
               key={booking.id}
-              className="tap-card flex flex-wrap items-center gap-4 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 shadow-sm backdrop-blur-md"
+              className="tap-card flex flex-col gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4 shadow-sm backdrop-blur-md sm:flex-row sm:flex-wrap sm:items-center sm:gap-4"
             >
-              <div className="w-20 shrink-0">
-                <p className="font-display text-lg text-charcoal">
-                  {timeFormatter.format(new Date(booking.start_time))}
-                </p>
+              <div className="flex items-center gap-4">
+                <div className="w-20 shrink-0">
+                  <p className="font-display text-lg text-charcoal">
+                    {timeFormatter.format(new Date(booking.start_time))}
+                  </p>
+                </div>
+
+                <div className="min-w-[10rem] flex-1">
+                  <p className="text-charcoal">{service?.name ?? "Servicio"}</p>
+                  <p className="text-sm text-charcoal/60">
+                    {clientLabel} · con {professional?.full_name ?? "profesional"}
+                  </p>
+                </div>
               </div>
 
-              <div className="min-w-[10rem] flex-1">
-                <p className="text-charcoal">{service?.name ?? "Servicio"}</p>
-                <p className="text-sm text-charcoal/60">
-                  {clientLabel} · con {professional?.full_name ?? "profesional"}
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-medium text-champagne">
+                  {service ? currencyFormatter(booking.currency).format(Number(booking.price)) : ""}
                 </p>
+
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[booking.status]}`}
+                >
+                  {STATUS_LABEL[booking.status]}
+                </span>
+
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${PAYMENT_STYLE[booking.payment_status]}`}
+                >
+                  {PAYMENT_LABEL[booking.payment_status]}
+                </span>
               </div>
 
-              <p className="text-sm font-medium text-champagne">
-                {service ? currencyFormatter(booking.currency).format(Number(booking.price)) : ""}
-              </p>
-
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLE[booking.status]}`}
-              >
-                {STATUS_LABEL[booking.status]}
-              </span>
-
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-medium ${PAYMENT_STYLE[booking.payment_status]}`}
-              >
-                {PAYMENT_LABEL[booking.payment_status]}
-              </span>
-
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {booking.payment_status === "paid" ? (
                   <button
                     type="button"
