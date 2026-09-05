@@ -433,6 +433,11 @@ export function BookingFlow() {
 
   const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
   const [staffForService, setStaffForService] = useState<ApiPublicStaff[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+  // null hasta que se resuelve: si solo hay una profesional se autoselecciona
+  // apenas llega la lista; si hay varias, la clienta tiene que elegir antes
+  // de ver horarios.
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   function toggleCategory(key: string) {
@@ -490,6 +495,7 @@ export function BookingFlow() {
               service_id: selectedServiceId,
               date: iso,
             });
+            if (selectedStaffId) params.set("staff_id", selectedStaffId);
             try {
               const res = await apiGet<ApiAvailability>(`/availability?${params}`);
               return { n, iso, hasSlots: res.slots.length > 0 };
@@ -588,15 +594,28 @@ export function BookingFlow() {
   useEffect(() => {
     if (!selectedServiceId) {
       setStaffForService([]);
+      setSelectedStaffId(null);
+      setLoadingStaff(false);
       return;
     }
+    setLoadingStaff(true);
+    setSelectedStaffId(null);
     apiGet<ApiPublicStaff[]>(`/services/${selectedServiceId}/staff`)
-      .then(setStaffForService)
-      .catch(() => setStaffForService([]));
+      .then((staff) => {
+        setStaffForService(staff);
+        // Una sola profesional para el servicio: se asigna sola, sin picker.
+        setSelectedStaffId(staff.length === 1 ? staff[0].id : null);
+      })
+      .catch(() => setStaffForService([]))
+      .finally(() => setLoadingStaff(false));
   }, [selectedServiceId]);
 
+  // Con más de una profesional para el servicio, hasta que la clienta no
+  // elige una no tiene sentido mostrar horarios (serían la unión de todas).
+  const staffChoicePending = staffForService.length > 1 && !selectedStaffId;
+
   useEffect(() => {
-    if (!selectedServiceId) {
+    if (!selectedServiceId || staffChoicePending) {
       setSlots([]);
       return;
     }
@@ -604,16 +623,18 @@ export function BookingFlow() {
     setSelectedSlot(null);
     setNoNextDateFound(false);
     const params = new URLSearchParams({ salon_id: SALON_ID, service_id: selectedServiceId, date });
+    if (selectedStaffId) params.set("staff_id", selectedStaffId);
     apiGet<ApiAvailability>(`/availability?${params}`)
       .then((res) => setSlots(res.slots))
       .catch(() => setSlots([]))
       .finally(() => setLoadingSlots(false));
-  }, [selectedServiceId, date]);
+  }, [selectedServiceId, date, selectedStaffId, staffChoicePending]);
 
   async function refreshSlots() {
     if (!selectedServiceId) return;
     setLoadingSlots(true);
     const params = new URLSearchParams({ salon_id: SALON_ID, service_id: selectedServiceId, date });
+    if (selectedStaffId) params.set("staff_id", selectedStaffId);
     try {
       const res = await apiGet<ApiAvailability>(`/availability?${params}`);
       setSlots(res.slots);
@@ -631,6 +652,7 @@ export function BookingFlow() {
         salon_id: SALON_ID,
         service_id: selectedService.id,
         start_time: selectedSlot.start,
+        staff_id: selectedStaffId ?? undefined,
         guest_name: bookingAsGuest ? guestFullName : undefined,
         guest_phone: bookingAsGuest ? guestPhone.trim() : undefined,
         guest_email: bookingAsGuest ? guestEmail.trim() || undefined : undefined,
@@ -906,6 +928,49 @@ export function BookingFlow() {
             </BackLink>
             <SectionHeading>{STEPS[1].heading}</SectionHeading>
 
+            {loadingStaff && (
+              <div className="mt-3 h-8 w-44 animate-pulse rounded-full bg-charcoal/8" />
+            )}
+
+            {!loadingStaff && staffForService.length === 1 && (
+              <p className="mt-3 text-sm text-charcoal/55">
+                Te atiende{" "}
+                <span className="font-medium text-charcoal">{staffForService[0].full_name}</span>
+              </p>
+            )}
+
+            {!loadingStaff && staffForService.length > 1 && (
+              <div className="mt-3">
+                <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-charcoal/35">
+                  ¿Con quién te querés atender?
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {staffForService.map((s) => {
+                    const isActive = s.id === selectedStaffId;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => {
+                          haptic(6);
+                          setSelectedStaffId(s.id);
+                        }}
+                        className={`tap-btn rounded-full border px-3.5 py-1.5 text-sm transition-colors ${
+                          isActive
+                            ? "border-transparent bg-gradient-to-br from-bubblegum to-champagne font-medium text-white"
+                            : "border-charcoal/15 text-charcoal/70 hover:border-charcoal/30"
+                        }`}
+                      >
+                        {s.full_name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {!staffChoicePending && !loadingStaff && (
+              <>
             <div className="mt-4 rounded-2xl bg-charcoal/[0.03] p-3">
               <div className="flex items-center justify-between px-1">
                 <button
@@ -1078,6 +1143,8 @@ export function BookingFlow() {
                   </div>
                 ))}
             </div>
+              </>
+            )}
           </motion.section>
         )}
       </AnimatePresence>
