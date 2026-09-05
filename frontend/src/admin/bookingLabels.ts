@@ -3,7 +3,7 @@ import type { AppointmentStatus } from "../types/booking";
 
 /**
  * Constantes y helpers de fecha compartidos entre `AdminCalendar` (grilla) y
- * `AdminDashboard` (resumen del día) — antes estaban duplicados en los dos
+ * `AdminMyBookings` (resumen del día) — antes estaban duplicados en los dos
  * archivos.
  */
 

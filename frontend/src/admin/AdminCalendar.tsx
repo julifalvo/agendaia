@@ -27,6 +27,11 @@ const SLOT_COUNT = (DAY_END_MIN - DAY_START_MIN) / SLOT_MIN;
 const ROW_PX = SLOT_MIN * PX_PER_MIN;
 const GRID_HEIGHT_PX = SLOT_COUNT * ROW_PX;
 
+// Conectar/sincronizar Google Calendar queda reservado a esta cuenta —
+// coincide con `google_calendar_allowed_email` en el backend, que además lo
+// exige del lado del servidor (esto solo evita mostrar la sección al resto).
+const GOOGLE_CALENDAR_ALLOWED_EMAIL = "marticarballo2711@gmail.com";
+
 function addDaysISO(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + days);
@@ -97,6 +102,8 @@ export function AdminCalendar() {
   const dragMovedRef = useRef(false);
 
   const isOwner = profile?.role === "owner";
+  const canManageGoogleCalendar =
+    isOwner && profile?.email?.toLowerCase() === GOOGLE_CALENDAR_ALLOWED_EMAIL;
   const activeStaff = useMemo(() => staff.filter((s) => s.is_active), [staff]);
   const manageableStaff = useMemo(
     () => activeStaff.filter((s) => canManage(s.id)),
@@ -139,7 +146,7 @@ export function AdminCalendar() {
       );
       setScheduleByStaff(Object.fromEntries(scheduleEntries));
 
-      if (profile?.role === "owner") {
+      if (canManageGoogleCalendar) {
         setGoogleStatus(await apiGet<ApiGoogleCalendarStatus>("/admin/google-calendar/status"));
       }
     } catch (err) {
@@ -148,7 +155,7 @@ export function AdminCalendar() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, profile?.role]);
+  }, [date, canManageGoogleCalendar]);
 
   useEffect(() => {
     void load();
@@ -438,7 +445,7 @@ export function AdminCalendar() {
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {notice && <p className="mt-3 text-sm text-champagne">{notice}</p>}
 
-      {isOwner && (
+      {canManageGoogleCalendar && (
         <div className="tap-card mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4">
           <p className="text-sm text-charcoal/70">
             Google Calendar:{" "}

@@ -6,8 +6,7 @@ import { LoginPanel } from "../components/LoginPanel";
 import { Logo } from "../components/Logo";
 
 const NAV_LINKS = [
-  { to: "/admin", label: "Agenda", end: true },
-  { to: "/admin/my-bookings", label: "Mis turnos" },
+  { to: "/admin", label: "Mis turnos", end: true },
   { to: "/admin/calendar", label: "Calendario" },
   { to: "/admin/services", label: "Servicios" },
   { to: "/admin/staff", label: "Staff" },
@@ -84,7 +83,7 @@ export function AdminLayout() {
             Cerrar sesión
           </button>
 
-          <nav className="flex w-full items-center gap-2 overflow-x-auto sm:order-2 sm:w-auto sm:overflow-visible">
+          <nav className="flex w-full flex-wrap items-center gap-2 sm:order-2 sm:w-auto sm:flex-nowrap">
             {NAV_LINKS.map((link) => (
               <NavLink key={link.to} to={link.to} end={link.end} className={navLinkClass}>
                 {link.label}

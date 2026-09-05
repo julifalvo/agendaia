@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_roles
 from app.core.config import get_settings
-from app.core.errors import BookingError
+from app.core.errors import BookingError, PermissionDenied
 from app.db.models import Profile, UserRole
 from app.db.session import get_session
 from app.schemas.google_calendar import (
@@ -33,9 +33,21 @@ router = APIRouter(prefix="/admin/google-calendar", tags=["google-calendar"])
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
 
+def _require_google_calendar_admin(
+    profile: Profile = Depends(require_roles(UserRole.owner)),
+) -> Profile:
+    """Conectar/sincronizar Google Calendar queda reservado a una única
+    cuenta (ver `google_calendar_allowed_email`) — el resto de owners y
+    staff del salón ni siquiera debe ver esta sección."""
+    allowed_email = get_settings().google_calendar_allowed_email.strip().lower()
+    if not profile.email or profile.email.strip().lower() != allowed_email:
+        raise PermissionDenied("No tenés permisos para gestionar Google Calendar")
+    return profile
+
+
 @router.get("/status", response_model=GoogleCalendarStatusOut)
 async def get_status(
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(_require_google_calendar_admin),
     session: AsyncSession = Depends(get_session),
 ) -> GoogleCalendarStatusOut:
     connection = await google_calendar.get_connection(session, profile.salon_id)
@@ -51,7 +63,7 @@ async def get_status(
 
 @router.get("/connect", response_model=GoogleCalendarConnectOut)
 async def connect(
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(_require_google_calendar_admin),
 ) -> GoogleCalendarConnectOut:
     url = google_calendar.build_authorization_url(profile.salon_id, profile.id)
     return GoogleCalendarConnectOut(authorization_url=url)
@@ -83,7 +95,7 @@ async def callback(
 
 @router.delete("/connection", status_code=204)
 async def disconnect(
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(_require_google_calendar_admin),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     await google_calendar.disconnect(session, profile.salon_id)
@@ -92,7 +104,7 @@ async def disconnect(
 @router.post("/sync", response_model=GoogleCalendarSyncResultOut)
 async def sync_now(
     payload: GoogleCalendarSyncRequest,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(_require_google_calendar_admin),
     session: AsyncSession = Depends(get_session),
 ) -> GoogleCalendarSyncResultOut:
     now = dt.datetime.now(dt.UTC)

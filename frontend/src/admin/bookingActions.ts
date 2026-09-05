@@ -3,7 +3,7 @@ import type { ApiBooking, PaymentStatus } from "../types/api";
 import type { AppointmentStatus } from "../types/booking";
 
 /**
- * Acciones sobre un turno ya existente, compartidas entre `AdminDashboard`
+ * Acciones sobre un turno ya existente, compartidas entre `AdminMyBookings`
  * (lista del día) y `AdminCalendar` (grilla estilo Teams) — mismo endpoint,
  * mismo shape de body, para no duplicar la lógica en dos lugares.
  */

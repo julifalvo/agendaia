@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     #: Clave Fernet (`Fernet.generate_key()`, 32 bytes url-safe base64) para
     #: cifrar el refresh_token antes de guardarlo. Vacía = feature deshabilitada.
     google_calendar_token_key: str = ""
+    #: Única cuenta autorizada a conectar/sincronizar Google Calendar. El
+    #: resto de owners y staff del salón no debe ver ni poder usar esta
+    #: sección, aunque tengan rol owner.
+    google_calendar_allowed_email: str = "marticarballo2711@gmail.com"
 
     db_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]

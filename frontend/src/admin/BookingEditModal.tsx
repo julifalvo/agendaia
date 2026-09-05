@@ -22,7 +22,7 @@ interface BookingEditModalProps {
 /**
  * Modal de edición de un turno existente: reprogramar (fecha/hora/staff),
  * cambiar de estado, marcar seña y cancelar. Antes vivía inline en
- * `AdminCalendar`; `AdminDashboard` reimplementaba una versión casi idéntica
+ * `AdminCalendar`; `AdminMyBookings` reimplementaba una versión casi idéntica
  * del formulario de reprogramar. Se unificó acá para que ambas vistas
  * compartan la misma lógica de mutación (busy/error incluidos).
  */

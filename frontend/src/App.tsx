@@ -5,7 +5,6 @@ import { PublicSite } from "./pages/PublicSite";
 import { PrivacyPolicy } from "./pages/PrivacyPolicy";
 import { TermsOfService } from "./pages/TermsOfService";
 import { AdminLayout } from "./admin/AdminLayout";
-import { AdminDashboard } from "./admin/AdminDashboard";
 import { AdminMyBookings } from "./admin/AdminMyBookings";
 import { AdminCalendar } from "./admin/AdminCalendar";
 import { AdminServices } from "./admin/AdminServices";
@@ -22,8 +21,7 @@ export default function App() {
           <Route path="/privacidad" element={<PrivacyPolicy />} />
           <Route path="/terminos" element={<TermsOfService />} />
           <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<AdminDashboard />} />
-            <Route path="my-bookings" element={<AdminMyBookings />} />
+            <Route index element={<AdminMyBookings />} />
             <Route path="calendar" element={<AdminCalendar />} />
             <Route path="services" element={<AdminServices />} />
             <Route path="staff" element={<AdminStaff />} />
