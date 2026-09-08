@@ -33,6 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async signOut() {
       await supabase.auth.signOut();
     },
+    async resetPasswordForEmail(email) {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/set-password`,
+      });
+      if (error) throw error;
+    },
+    async updatePassword(password) {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+    },
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

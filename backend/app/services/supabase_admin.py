@@ -31,6 +31,7 @@ async def invite_user(email: str, full_name: str, salon_id: uuid.UUID) -> dict:
             "SUPABASE_URL / SUPABASE_SERVICE_KEY no están configurados en el backend"
         )
 
+    redirect_to = f"{settings.frontend_base_url.rstrip('/')}/set-password"
     url = f"{settings.supabase_url.rstrip('/')}/auth/v1/invite"
     headers = {
         "apikey": settings.supabase_service_key,
@@ -42,7 +43,9 @@ async def invite_user(email: str, full_name: str, salon_id: uuid.UUID) -> dict:
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json=body, headers=headers)
+            response = await client.post(
+                url, json=body, headers=headers, params={"redirect_to": redirect_to}
+            )
     except httpx.HTTPError as exc:
         raise UpstreamError(
             "No se pudo contactar el servicio de autenticación"
