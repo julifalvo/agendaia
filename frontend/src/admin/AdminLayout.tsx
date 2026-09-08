@@ -75,13 +75,21 @@ export function AdminLayout() {
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={() => void signOut()}
-            className="tap-btn shrink-0 text-xs text-charcoal/60 underline-offset-2 hover:underline sm:order-3 sm:text-sm"
-          >
-            Cerrar sesión
-          </button>
+          <div className="flex shrink-0 items-center gap-3 sm:order-3">
+            <Link
+              to="/set-password"
+              className="tap-btn text-xs text-charcoal/60 underline-offset-2 hover:underline sm:text-sm"
+            >
+              Cambiar contraseña
+            </Link>
+            <button
+              type="button"
+              onClick={() => void signOut()}
+              className="tap-btn text-xs text-charcoal/60 underline-offset-2 hover:underline sm:text-sm"
+            >
+              Cerrar sesión
+            </button>
+          </div>
 
           <nav className="flex w-full flex-wrap items-center gap-2 sm:order-2 sm:w-auto sm:flex-nowrap">
             {NAV_LINKS.map((link) => (

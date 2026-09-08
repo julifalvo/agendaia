@@ -1,12 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuthContext";
+import { authRedirectType } from "../lib/supabaseClient";
 import { DecorBackground } from "../components/DecorBackground";
 import { Logo } from "../components/Logo";
 
+// Si `authRedirectType` es null, esta sesión no vino de un link de
+// invitación/recuperación: es una sesión normal ya abierta (alguien navegó
+// directo a esta URL). Ahí sí hace falta la contraseña actual, para que no
+// alcance con tener la sesión abierta en una compu para tomar la cuenta.
 export function SetPassword() {
-  const { user, loading, updatePassword } = useAuth();
+  const { user, loading, signInWithPassword, updatePassword } = useAuth();
   const navigate = useNavigate();
+  const requiresCurrentPassword = authRedirectType === null;
+
+  const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +25,19 @@ export function SetPassword() {
     event.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("Las contraseñas no coinciden");
+      setError("Las contraseñas nuevas no coinciden");
       return;
     }
     setSubmitting(true);
     try {
+      if (requiresCurrentPassword) {
+        if (!user?.email) throw new Error("No se pudo verificar tu cuenta");
+        try {
+          await signInWithPassword(user.email, currentPassword);
+        } catch {
+          throw new Error("La contraseña actual no es correcta");
+        }
+      }
       await updatePassword(password);
       setDone(true);
       setTimeout(() => navigate("/admin"), 1500);
@@ -64,11 +80,21 @@ export function SetPassword() {
         ) : (
           <>
             <h2 className="font-display text-center text-xl font-semibold text-charcoal">
-              Elegí tu contraseña
+              {requiresCurrentPassword ? "Cambiar contraseña" : "Elegí tu contraseña"}
             </h2>
             <p className="mt-1 text-center text-xs text-charcoal/50">{user.email}</p>
 
             <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
+              {requiresCurrentPassword && (
+                <input
+                  type="password"
+                  placeholder="Contraseña actual"
+                  required
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="rounded-xl border border-charcoal/15 bg-white px-4 py-2 text-sm text-charcoal outline-none transition-colors hover:border-baby-pink focus:border-champagne"
+                />
+              )}
               <input
                 type="password"
                 placeholder="Contraseña nueva"
@@ -80,7 +106,7 @@ export function SetPassword() {
               />
               <input
                 type="password"
-                placeholder="Repetir contraseña"
+                placeholder="Repetir contraseña nueva"
                 required
                 minLength={6}
                 value={confirm}
