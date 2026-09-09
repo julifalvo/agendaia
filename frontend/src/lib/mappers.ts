@@ -1,6 +1,15 @@
 import type { ApiBooking, ApiPublicStaff, ApiService } from "../types/api";
 import type { Booking } from "../types/booking";
 
+/** "Alisados" tiene precio variable según largo/tipo de pelo: se muestra como punto de partida, no como precio cerrado. */
+export function formatServicePrice(service: Pick<ApiService, "price" | "currency" | "category_name">): string {
+  const amount = new Intl.NumberFormat("es-AR", {
+    style: "currency",
+    currency: service.currency,
+  }).format(Number(service.price));
+  return service.category_name === "Alisados" ? `Desde ${amount}` : amount;
+}
+
 export function toDisplayBooking(
   api: ApiBooking,
   service: ApiService | undefined,

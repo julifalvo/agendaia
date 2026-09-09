@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { apiGet, apiPatch, apiPost, apiDelete, ApiError } from "../lib/api";
+import { formatServicePrice } from "../lib/mappers";
 import type {
   ApiCategory,
   ApiService,
@@ -7,9 +8,6 @@ import type {
   ServiceInput,
   ServiceUpdateInput,
 } from "../types/api";
-
-const currencyFormatter = (currency: string) =>
-  new Intl.NumberFormat("es-AR", { style: "currency", currency });
 
 const UNCATEGORIZED = "__uncategorized__";
 
@@ -109,12 +107,17 @@ export function AdminServices() {
         };
         await apiPatch(`/services/${editingId}`, payload);
       } else {
+        const targetCategoryId = form.category_id || null;
+        const siblingCount = services.filter(
+          (s) => (s.category_id ?? null) === targetCategoryId,
+        ).length;
         const payload: ServiceInput = {
           name: form.name,
           description: form.description || null,
           duration_minutes: Number(form.duration_minutes),
           price: form.price,
-          category_id: form.category_id || null,
+          category_id: targetCategoryId,
+          sort_order: siblingCount,
         };
         await apiPost("/services", payload);
       }
@@ -220,6 +223,44 @@ export function AdminServices() {
     }
   }
 
+  async function moveCategory(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= categories.length) return;
+    const reordered = [...categories];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setCategoryBusyId(categories[index].id);
+    setError(null);
+    try {
+      await Promise.all(
+        reordered.map((category, i) => apiPatch(`/categories/${category.id}`, { sort_order: i })),
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo reordenar la categoría");
+    } finally {
+      setCategoryBusyId(null);
+    }
+  }
+
+  async function moveService(group: ApiService[], index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= group.length) return;
+    const reordered = [...group];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setBusyId(group[index].id);
+    setError(null);
+    try {
+      await Promise.all(
+        reordered.map((service, i) => apiPatch(`/services/${service.id}`, { sort_order: i })),
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo reordenar el servicio");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div>
       <h2 className="font-display text-2xl text-charcoal">Servicios</h2>
@@ -228,11 +269,31 @@ export function AdminServices() {
       <div className="tap-card mt-6 rounded-2xl border border-baby-pink/30 bg-white/60 p-4">
         <h3 className="text-sm font-medium text-charcoal/70">Categorías</h3>
         <div className="mt-3 flex flex-wrap gap-2">
-          {categories.map((category) => (
+          {categories.map((category, index) => (
             <div
               key={category.id}
               className="flex items-center gap-1.5 rounded-full border border-charcoal/15 bg-white px-3 py-1.5"
             >
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  disabled={index === 0 || categoryBusyId === category.id}
+                  onClick={() => void moveCategory(index, -1)}
+                  aria-label={`Mover categoría ${category.name} antes`}
+                  className="tap-btn px-1 text-2xl leading-none text-charcoal/40 hover:text-charcoal disabled:opacity-30"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  disabled={index === categories.length - 1 || categoryBusyId === category.id}
+                  onClick={() => void moveCategory(index, 1)}
+                  aria-label={`Mover categoría ${category.name} después`}
+                  className="tap-btn px-1 text-2xl leading-none text-charcoal/40 hover:text-charcoal disabled:opacity-30"
+                >
+                  ›
+                </button>
+              </div>
               {editingCategoryId === category.id ? (
                 <input
                   autoFocus
@@ -386,22 +447,43 @@ export function AdminServices() {
               {group.label}
             </h3>
             <div className="flex flex-col gap-2">
-              {group.services.map((service) => (
+              {group.services.map((service, index) => (
                 <div
                   key={service.id}
                   className={`tap-card flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-charcoal/10 bg-white/60 p-4 ${
                     !service.is_active ? "opacity-50" : ""
                   }`}
                 >
-                  <div>
-                    <p className="text-charcoal">{service.name}</p>
-                    <p className="text-sm text-charcoal/60">
-                      {service.duration_minutes} min ·{" "}
-                      {currencyFormatter(service.currency).format(Number(service.price))}
-                    </p>
-                    {service.description && (
-                      <p className="mt-1 max-w-md text-sm text-charcoal/50">{service.description}</p>
-                    )}
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-col leading-none">
+                      <button
+                        type="button"
+                        disabled={index === 0 || busyId === service.id}
+                        onClick={() => void moveService(group.services, index, -1)}
+                        aria-label={`Mover ${service.name} antes`}
+                        className="tap-btn px-1 text-2xl leading-none text-charcoal/40 hover:text-charcoal disabled:opacity-30"
+                      >
+                        ▲
+                      </button>
+                      <button
+                        type="button"
+                        disabled={index === group.services.length - 1 || busyId === service.id}
+                        onClick={() => void moveService(group.services, index, 1)}
+                        aria-label={`Mover ${service.name} después`}
+                        className="tap-btn px-1 text-2xl leading-none text-charcoal/40 hover:text-charcoal disabled:opacity-30"
+                      >
+                        ▼
+                      </button>
+                    </div>
+                    <div>
+                      <p className="text-charcoal">{service.name}</p>
+                      <p className="text-sm text-charcoal/60">
+                        {service.duration_minutes} min · {formatServicePrice(service)}
+                      </p>
+                      {service.description && (
+                        <p className="mt-1 max-w-md text-sm text-charcoal/50">{service.description}</p>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button

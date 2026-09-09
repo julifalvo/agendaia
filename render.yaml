@@ -38,3 +38,11 @@ services:
         sync: false
       - key: DB_ECHO
         value: "false"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GOOGLE_CALENDAR_TOKEN_KEY
+        sync: false

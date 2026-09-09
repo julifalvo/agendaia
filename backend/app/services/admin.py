@@ -146,7 +146,7 @@ async def list_services(
     stmt = select(Service).where(Service.salon_id == salon_id)
     if not include_inactive:
         stmt = stmt.where(Service.is_active.is_(True))
-    stmt = stmt.order_by(Service.name)
+    stmt = stmt.order_by(Service.sort_order, Service.name)
     services = list((await session.scalars(stmt)).all())
     return await _attach_category_names(session, salon_id, services)
 

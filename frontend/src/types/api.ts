@@ -20,6 +20,7 @@ export interface ApiService {
   price: string;
   currency: string;
   is_active: boolean;
+  sort_order: number;
 }
 
 export interface ApiCategory {
@@ -123,6 +124,7 @@ export interface ServiceInput {
   buffer_minutes?: number;
   price: string;
   currency?: string;
+  sort_order?: number;
 }
 
 export interface ServiceUpdateInput {
@@ -134,6 +136,7 @@ export interface ServiceUpdateInput {
   price?: string;
   currency?: string;
   is_active?: boolean;
+  sort_order?: number;
 }
 
 export interface ApiScheduleBlock {

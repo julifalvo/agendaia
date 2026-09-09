@@ -40,6 +40,7 @@ const SERVICE: ApiService = {
   price: "12000.00",
   currency: "ARS",
   is_active: true,
+  sort_order: 0,
 };
 
 const STAFF: ApiPublicStaff = { id: "staff-1", full_name: "Valentina" };

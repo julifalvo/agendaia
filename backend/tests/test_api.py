@@ -555,6 +555,7 @@ def test_owner_crea_servicio_en_su_propio_salon(client, monkeypatch):
             price=data.price,
             currency=data.currency,
             is_active=True,
+            sort_order=data.sort_order,
         )
 
     monkeypatch.setattr(admin_service, "create_service", fake_create)

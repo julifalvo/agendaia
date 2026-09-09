@@ -45,6 +45,7 @@ class ServiceCreate(BaseModel):
     buffer_minutes: int = Field(default=0, ge=0, le=120)
     price: Decimal = Field(ge=0)
     currency: str = Field(default="ARS", min_length=3, max_length=3)
+    sort_order: int = Field(default=0)
 
 
 class ServiceUpdate(BaseModel):
@@ -58,6 +59,7 @@ class ServiceUpdate(BaseModel):
     price: Decimal | None = Field(default=None, ge=0)
     currency: str | None = Field(default=None, min_length=3, max_length=3)
     is_active: bool | None = None
+    sort_order: int | None = None
 
 
 class ServiceOut(BaseModel):
@@ -76,6 +78,7 @@ class ServiceOut(BaseModel):
     price: Decimal
     currency: str
     is_active: bool
+    sort_order: int
 
 
 # --- Staff -----------------------------------------------------------------

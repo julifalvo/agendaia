@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { AnimatePresence, motion } from "framer-motion";
 import { apiGet, apiPost, ApiError } from "../lib/api";
 import { haptic } from "../lib/haptics";
-import { toDisplayBooking } from "../lib/mappers";
+import { formatServicePrice, toDisplayBooking } from "../lib/mappers";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
 import { BookingCard } from "./BookingCard";
@@ -374,12 +374,11 @@ function ServiceOption({
       <div>
         <p className="font-display text-[1.05rem] text-charcoal">{service.name}</p>
         <p className="mt-0.5 text-[13px] text-charcoal/45">
-          {service.duration_minutes} min ·{" "}
-          {new Intl.NumberFormat("es-AR", {
-            style: "currency",
-            currency: service.currency,
-          }).format(Number(service.price))}
+          {service.duration_minutes} min · {formatServicePrice(service)}
         </p>
+        {service.description && (
+          <p className="mt-1 text-[13px] leading-snug text-charcoal/40">{service.description}</p>
+        )}
       </div>
       <div
         className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors ${
