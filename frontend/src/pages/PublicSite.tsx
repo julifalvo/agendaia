@@ -7,9 +7,10 @@ import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
 import { Divider } from "../components/Divider";
 import { InstagramIcon } from "../components/InstagramIcon";
-import { Logo, Monogram } from "../components/Logo";
+import { Logo, Monogram, Wordmark } from "../components/Logo";
 import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
+import { Sparkle } from "../components/Sparkle";
 import { Welcome } from "../components/Welcome";
 
 function TopBar() {
@@ -48,15 +49,20 @@ function TopBar() {
 
 function Hero() {
   return (
-    <div className="mx-auto max-w-md px-5 pb-8 pt-10 text-center sm:px-6 lg:max-w-none lg:pt-16">
+    <div className="mx-auto max-w-md px-5 pb-10 pt-10 text-center sm:px-6 lg:max-w-none lg:pt-16">
       <div className="glow-orb mx-auto inline-block">
-        <Monogram className="h-12 w-12 lg:h-14 lg:w-14" />
+        <Wordmark className="h-20 lg:h-24" />
       </div>
 
-      <p className="mt-4 text-[11px] font-medium uppercase tracking-[0.35em] text-champagne">
-        MC Nails Studio
-      </p>
-      <h1 className="mt-3 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal lg:text-[3.4rem]">
+      <div
+        className="mx-auto mt-7 flex w-fit items-center gap-1.5 rounded-full border border-baby-pink/60 bg-white/70 px-3.5 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-bubblegum backdrop-blur-sm"
+        style={{ boxShadow: "0 4px 14px -6px rgba(255, 111, 160, 0.35)" }}
+      >
+        <Sparkle className="h-2.5 w-2.5 shrink-0" color="var(--color-bubblegum)" />
+        Reservá tu turno online
+      </div>
+
+      <h1 className="mt-5 font-display text-[2.6rem] leading-[0.98] tracking-tight text-charcoal lg:text-[3.6rem]">
         Uñas lindas,
         <br />
         <span className="italic text-bubblegum">a tu manera.</span>
@@ -64,7 +70,7 @@ function Hero() {
       <p className="mx-auto mt-4 max-w-[26rem] text-sm text-charcoal/55 lg:text-base">
         Reservá tu turno en minutos, sin vueltas ni necesidad de crear una cuenta.
       </p>
-      <div className="mt-5 flex justify-center">
+      <div className="mt-6 flex justify-center">
         <PolishSwatches />
       </div>
     </div>
@@ -89,11 +95,21 @@ function BrandPanel() {
 
       <Divider className="my-8 justify-start" />
 
-      <div className="flex flex-col gap-6">
-        {HOW_IT_WORKS.map((item) => (
+      <div className="flex flex-col">
+        {HOW_IT_WORKS.map((item, i) => (
           <div key={item.step} className="flex gap-4">
-            <span className="font-display text-lg italic text-champagne/70">{item.step}</span>
-            <div>
+            <div className="flex flex-col items-center">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-bubblegum/25 bg-gradient-to-br from-bubblegum/10 to-champagne/10 font-display text-sm italic text-bubblegum"
+                style={{ boxShadow: "0 4px 12px -6px rgba(255, 111, 160, 0.3)" }}
+              >
+                {item.step}
+              </span>
+              {i < HOW_IT_WORKS.length - 1 && (
+                <span className="my-1 w-px flex-1 bg-gradient-to-b from-bubblegum/25 to-transparent" />
+              )}
+            </div>
+            <div className={i < HOW_IT_WORKS.length - 1 ? "pb-6" : ""}>
               <p className="font-display text-base text-charcoal">{item.title}</p>
               <p className="mt-0.5 text-sm text-charcoal/50">{item.detail}</p>
             </div>
@@ -166,15 +182,16 @@ export function PublicSite() {
                   <Divider className="mb-6 lg:hidden" />
 
                   <div
-                    className="rounded-[2rem] border border-baby-pink/40 bg-white/75 p-6 backdrop-blur-xl sm:p-8"
+                    className="relative overflow-hidden rounded-[2rem] border border-baby-pink/40 bg-white/75 p-6 backdrop-blur-xl sm:p-8"
                     style={{ boxShadow: "var(--shadow-soft)" }}
                   >
+                    <div className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-bubblegum via-baby-pink to-champagne" />
                     <BookingFlow />
                   </div>
                 </div>
               </div>
 
-              <footer className="mt-10 flex flex-col items-center gap-3 lg:mt-16">
+              <footer className="mt-14 flex flex-col items-center gap-3 border-t border-baby-pink/40 pt-10 lg:mt-20">
                 <Monogram className="h-7 w-7 opacity-60 lg:hidden" />
 
                 <a

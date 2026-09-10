@@ -117,14 +117,14 @@ function ProgressTrack({ step }: { step: number }) {
     <div className="mb-7">
       <div className="h-1 overflow-hidden rounded-full bg-charcoal/8">
         <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-bubblegum to-champagne"
+          className="h-full rounded-full bg-gradient-to-r from-bubblegum to-baby-pink"
           initial={false}
           animate={{ width: `${progress}%` }}
           transition={{ type: "spring", stiffness: 300, damping: 32 }}
         />
       </div>
       <div className="mt-2 flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-[0.15em] text-champagne">
+        <span className="text-[11px] font-medium uppercase tracking-[0.15em] text-bubblegum">
           Paso {step + 1} de {STEPS.length}
         </span>
         <span className="text-[11px] text-charcoal/40">{STEPS[step].label}</span>
