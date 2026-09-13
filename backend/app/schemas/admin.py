@@ -144,6 +144,13 @@ class StaffInviteOut(StaffOut):
     temporary_password: str
 
 
+class StaffPasswordResetOut(BaseModel):
+    """Respuesta de `POST /staff/{id}/reset-password`: la contraseña
+    temporal nueva, para pasarle al staff a mano igual que en el alta."""
+
+    temporary_password: str
+
+
 # --- Horarios laborales ------------------------------------------------------
 #
 # Por fecha puntual del calendario (no recurrente semana a semana). Ver

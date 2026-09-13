@@ -117,3 +117,62 @@ async def delete_user(user_id: uuid.UUID) -> None:
             "El servicio de autenticación rechazó el borrado del usuario",
             detail=detail,
         )
+
+
+async def reset_password(user_id: uuid.UUID, password: str) -> None:
+    """Pisa la contraseña de un usuario ya existente con una temporal nueva
+    (`PUT /auth/v1/admin/users/{id}`) y marca `must_change_password` para que
+    tenga que cambiarla en el próximo login — mismo criterio que el alta.
+
+    Usado tanto para el botón "Restablecer contraseña" del panel como para
+    las cuentas de staff que quedaron a mitad de camino con el viejo flujo de
+    invitación por mail (creadas, pero sin contraseña utilizable porque nunca
+    llegaron a abrir el link).
+
+    Se lee el usuario primero para mergear `user_metadata` a mano: la Admin
+    API de GoTrue no garantiza un merge parcial, y pisarlo entero borraría
+    `full_name`/`salon_id` de cuentas viejas.
+    """
+    settings = get_settings()
+    if not settings.supabase_url or not settings.supabase_service_key:
+        raise RuntimeError(
+            "SUPABASE_URL / SUPABASE_SERVICE_KEY no están configurados en el backend"
+        )
+
+    base_url = f"{settings.supabase_url.rstrip('/')}/auth/v1/admin/users/{user_id}"
+    headers = {
+        "apikey": settings.supabase_service_key,
+        "Authorization": f"Bearer {settings.supabase_service_key}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+            current = await client.get(base_url, headers=headers)
+            if current.status_code >= 400:
+                raise UpstreamError(
+                    "No se pudo leer el usuario antes de restablecer la contraseña",
+                    detail=current.text,
+                )
+            metadata = dict(current.json().get("user_metadata") or {})
+            metadata["must_change_password"] = True
+
+            response = await client.put(
+                base_url,
+                json={"password": password, "user_metadata": metadata},
+                headers=headers,
+            )
+    except httpx.HTTPError as exc:
+        raise UpstreamError(
+            "No se pudo contactar el servicio de autenticación"
+        ) from exc
+
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+        except ValueError:
+            payload = {}
+        detail = str(payload.get("msg") or payload.get("message") or payload)
+        raise UpstreamError(
+            "El servicio de autenticación rechazó el restablecimiento de contraseña",
+            detail=detail,
+        )

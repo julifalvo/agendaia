@@ -35,6 +35,7 @@ from app.schemas.admin import (
     StaffInviteCreate,
     StaffInviteOut,
     StaffOut,
+    StaffPasswordResetOut,
     StaffServicesUpdate,
     TimeOffCreate,
     TimeOffOut,
@@ -224,6 +225,21 @@ async def invite_staff(
         **StaffOut.model_validate(created).model_dump(),
         temporary_password=temporary_password,
     )
+
+
+@router.post("/staff/{staff_id}/reset-password", response_model=StaffPasswordResetOut)
+async def reset_staff_password(
+    staff_id: uuid.UUID,
+    profile: Profile = Depends(require_full_access),
+    session: AsyncSession = Depends(get_session),
+) -> StaffPasswordResetOut:
+    """Genera una contraseña temporal nueva y fuerza el cambio en el próximo
+    login. Pensado para las cuentas creadas con el viejo flujo de invitación
+    por mail que quedaron sin contraseña utilizable (nunca abrieron el
+    link), y como reset general si alguien se olvida la suya. Owner-only,
+    mismo criterio que `invite_staff`."""
+    temporary_password = await admin.reset_staff_password(session, profile.salon_id, staff_id)
+    return StaffPasswordResetOut(temporary_password=temporary_password)
 
 
 @router.get("/staff", response_model=list[StaffOut])

@@ -1,14 +1,15 @@
-"""Tests de `POST /staff/invite`.
+"""Tests de `POST /staff/invite` y `POST /staff/{id}/reset-password`.
 
 Dos nivels, mismo criterio que el resto de la suite:
-  - Capa HTTP (`test_api.py`): se monkeypatchea `admin.invite_staff` para
-    probar autorización (owner-only) y el shape de la respuesta, sin tocar
-    sesión de DB real (`_DummySession`, ver `test_api.py`).
-  - Capa de servicio: se monkeypatchea `supabase_admin.create_staff_user`
-    (nunca se pega a la red) y se usa una sesión falsa en memoria (mismo
-    patrón que `FakeSession` de `test_bookings.py`) para probar que
-    `invite_staff` asigna el rol pedido, devuelve la contraseña temporal y
-    traduce errores del upstream correctamente.
+  - Capa HTTP (`test_api.py`): se monkeypatchea `admin.invite_staff`/
+    `admin.reset_staff_password` para probar autorización (owner-only) y el
+    shape de la respuesta, sin tocar sesión de DB real (`_DummySession`, ver
+    `test_api.py`).
+  - Capa de servicio: se monkeypatchea `supabase_admin.create_staff_user`/
+    `supabase_admin.reset_password` (nunca se pega a la red) y se usa una
+    sesión falsa en memoria (mismo patrón que `FakeSession` de
+    `test_bookings.py`) para probar que asignan el rol pedido, devuelven la
+    contraseña temporal y traducen errores del upstream correctamente.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import deps
-from app.core.errors import ConflictError, UpstreamError
+from app.core.errors import ConflictError, ResourceNotFound, UpstreamError
 from app.db.models import Profile, UserRole
 from app.db.session import get_session
 from app.main import app
@@ -122,6 +123,31 @@ def test_email_invalido_es_422(client):
         json={"email": "no-es-un-email", "full_name": "Nueva Staff", "role": "staff"},
     )
     assert res.status_code == 422
+
+
+def test_owner_puede_restablecer_contrasena(client, monkeypatch):
+    owner = make_profile(UserRole.owner)
+    as_profile(owner)
+    staff_id = uuid.uuid4()
+
+    async def fake_reset(session, salon_id, sid):
+        assert salon_id == owner.salon_id
+        assert sid == staff_id
+        return "otra-clave-temporal"
+
+    monkeypatch.setattr(admin_service, "reset_staff_password", fake_reset)
+
+    res = client.post(f"/api/v1/staff/{staff_id}/reset-password")
+    assert res.status_code == 200
+    assert res.json()["temporary_password"] == "otra-clave-temporal"
+
+
+def test_staff_no_puede_restablecer_contrasena(client):
+    as_profile(make_profile(UserRole.staff))
+
+    res = client.post(f"/api/v1/staff/{uuid.uuid4()}/reset-password")
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
 
 
 # --- capa de servicio: asignación de rol y mapeo de errores ---------------
@@ -234,3 +260,39 @@ async def test_invite_staff_error_si_el_profile_no_aparece(monkeypatch):
 
     with pytest.raises(UpstreamError):
         await admin_service.invite_staff(session, SALON_ID, data)
+
+
+# --- capa de servicio: reset de contraseña --------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reset_staff_password_genera_y_delega_al_upstream(monkeypatch):
+    user_id = uuid.uuid4()
+    profile = Profile(
+        id=user_id, salon_id=SALON_ID, role=UserRole.staff, full_name="X", email="x@example.com"
+    )
+
+    calls = []
+
+    async def fake_reset_password(uid, password):
+        calls.append((uid, password))
+
+    monkeypatch.setattr(supabase_admin, "reset_password", fake_reset_password)
+
+    session = _FakeSession(profile)
+    temporary_password = await admin_service.reset_staff_password(session, SALON_ID, user_id)
+
+    assert len(temporary_password) == 12
+    assert calls == [(user_id, temporary_password)]
+
+
+@pytest.mark.asyncio
+async def test_reset_staff_password_404_si_no_es_de_este_salon(monkeypatch):
+    async def fake_reset_password(uid, password):
+        raise AssertionError("no debería llamarse al upstream")
+
+    monkeypatch.setattr(supabase_admin, "reset_password", fake_reset_password)
+
+    session = _FakeSession(None)
+    with pytest.raises(ResourceNotFound):
+        await admin_service.reset_staff_password(session, SALON_ID, uuid.uuid4())

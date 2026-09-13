@@ -19,6 +19,11 @@ export function AdminStaff() {
   const [created, setCreated] = useState<ApiStaffInvite | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [resetResult, setResetResult] = useState<{ staffId: string; password: string } | null>(
+    null,
+  );
+  const [resetCopied, setResetCopied] = useState(false);
+
   async function load() {
     setLoading(true);
     setError(null);
@@ -70,6 +75,29 @@ export function AdminStaff() {
     } finally {
       setBusyId(null);
     }
+  }
+
+  async function resetPassword(member: ApiStaff) {
+    setBusyId(member.id);
+    setError(null);
+    setResetResult(null);
+    setResetCopied(false);
+    try {
+      const result = await apiPost<{ temporary_password: string }>(
+        `/staff/${member.id}/reset-password`,
+      );
+      setResetResult({ staffId: member.id, password: result.temporary_password });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "No se pudo restablecer la contraseña");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function copyResetPassword() {
+    if (!resetResult) return;
+    await navigator.clipboard.writeText(resetResult.password);
+    setResetCopied(true);
   }
 
   async function deleteForever(member: ApiStaff) {
@@ -269,6 +297,14 @@ export function AdminStaff() {
                 <button
                   type="button"
                   disabled={busyId === member.id}
+                  onClick={() => void resetPassword(member)}
+                  className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                >
+                  Restablecer contraseña
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === member.id}
                   onClick={() => void deleteForever(member)}
                   className="tap-btn rounded-full border border-red-200 px-3 py-1.5 text-xs text-red-600 transition-colors hover:border-red-400 disabled:opacity-50"
                 >
@@ -276,6 +312,28 @@ export function AdminStaff() {
                 </button>
               </div>
             </div>
+
+            {resetResult?.staffId === member.id && (
+              <div className="mt-3 rounded-2xl border border-baby-pink/40 bg-baby-pink/10 p-3">
+                <p className="text-xs text-charcoal/60">
+                  Contraseña temporal nueva para <strong>{member.full_name}</strong> — pasásela a
+                  mano, no se manda por mail. Se la va a pedir para entrar y va a tener que
+                  cambiarla antes de usar el panel.
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <code className="rounded-lg border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal">
+                    {resetResult.password}
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => void copyResetPassword()}
+                    className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40"
+                  >
+                    {resetCopied ? "Copiada" : "Copiar"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="mt-3 flex flex-wrap gap-2">
               {services.map((service) => (

@@ -413,6 +413,22 @@ async def delete_staff_permanently(
     session.expire(profile)
 
 
+async def reset_staff_password(
+    session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID
+) -> str:
+    """Genera una contraseña temporal nueva para un staff/owner ya existente
+    y fuerza el cambio en el próximo login — mismo mecanismo que
+    `invite_staff`. Sirve tanto para las cuentas creadas con el viejo flujo
+    de invitación por mail (que pueden haber quedado sin contraseña
+    utilizable si el staff nunca abrió el link) como para un olvido de
+    contraseña sin depender de que el mail de recuperación le llegue.
+    """
+    profile = await load_staff_profile(session, salon_id, staff_id)
+    temporary_password = _generate_temp_password()
+    await supabase_admin.reset_password(profile.id, temporary_password)
+    return temporary_password
+
+
 async def get_staff_services(
     session: AsyncSession, salon_id: uuid.UUID, staff_id: uuid.UUID
 ) -> list[uuid.UUID]:
