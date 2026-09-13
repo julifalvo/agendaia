@@ -171,6 +171,10 @@ export interface StaffInviteInput {
   role: "owner" | "staff";
 }
 
+export interface ApiStaffInvite extends ApiStaff {
+  temporary_password: string;
+}
+
 export interface ApiTimeOff {
   id: string;
   staff_id: string;

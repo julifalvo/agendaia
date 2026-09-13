@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiGet, apiPatch, apiPost, apiPut, apiDelete, ApiError } from "../lib/api";
-import type { ApiService, ApiStaff, StaffInviteInput } from "../types/api";
+import type { ApiService, ApiStaff, ApiStaffInvite, StaffInviteInput } from "../types/api";
 
 const EMPTY_INVITE: StaffInviteInput = { email: "", full_name: "", role: "staff" };
 
@@ -16,7 +16,8 @@ export function AdminStaff() {
   const [invite, setInvite] = useState<StaffInviteInput>(EMPTY_INVITE);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-  const [inviteSent, setInviteSent] = useState<string | null>(null);
+  const [created, setCreated] = useState<ApiStaffInvite | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -95,17 +96,24 @@ export function AdminStaff() {
     event.preventDefault();
     setInviteBusy(true);
     setInviteError(null);
-    setInviteSent(null);
+    setCreated(null);
+    setCopied(false);
     try {
-      const created = await apiPost<ApiStaff>("/staff/invite", invite);
-      setStaff((prev) => [...prev, created].sort((a, b) => a.full_name.localeCompare(b.full_name)));
-      setInviteSent(`Invitación enviada a ${created.email}`);
+      const result = await apiPost<ApiStaffInvite>("/staff/invite", invite);
+      setStaff((prev) => [...prev, result].sort((a, b) => a.full_name.localeCompare(b.full_name)));
+      setCreated(result);
       setInvite(EMPTY_INVITE);
     } catch (err) {
-      setInviteError(err instanceof ApiError ? err.message : "No se pudo enviar la invitación");
+      setInviteError(err instanceof ApiError ? err.message : "No se pudo crear el usuario");
     } finally {
       setInviteBusy(false);
     }
+  }
+
+  async function copyTempPassword() {
+    if (!created) return;
+    await navigator.clipboard.writeText(created.temporary_password);
+    setCopied(true);
   }
 
   function isAssigned(staffId: string, serviceId: string): boolean {
@@ -189,11 +197,33 @@ export function AdminStaff() {
           disabled={inviteBusy}
           className="tap-btn rounded-full bg-charcoal px-5 py-2 text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {inviteBusy ? "Invitando..." : "Invitar"}
+          {inviteBusy ? "Creando..." : "Crear usuario"}
         </button>
       </form>
       {inviteError && <p className="mt-2 text-sm text-red-600">{inviteError}</p>}
-      {inviteSent && <p className="mt-2 text-sm text-green-700">{inviteSent}</p>}
+      {created && (
+        <div className="tap-card mt-2 rounded-2xl border border-baby-pink/40 bg-baby-pink/10 p-4">
+          <p className="text-sm text-charcoal">
+            Usuario creado para <strong>{created.full_name}</strong> ({created.email}).
+          </p>
+          <p className="mt-1 text-xs text-charcoal/60">
+            Pasale esta contraseña temporal a mano (WhatsApp, en persona) — no se manda por mail.
+            Se la va a pedir para entrar y va a tener que cambiarla antes de usar el panel.
+          </p>
+          <div className="mt-2 flex items-center gap-2">
+            <code className="rounded-lg border border-charcoal/15 bg-white px-3 py-1.5 text-sm text-charcoal">
+              {created.temporary_password}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copyTempPassword()}
+              className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40"
+            >
+              {copied ? "Copiada" : "Copiar"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {loading && <p className="mt-6 text-sm text-charcoal/50">Cargando...</p>}
 

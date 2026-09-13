@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
+import { hasFullAccess } from "../lib/access";
 import { useProfile } from "../hooks/useProfileContext";
 import type { ApiSalonClosure } from "../types/api";
 import { todayISODate } from "./bookingLabels";
@@ -16,7 +17,7 @@ const EMPTY_FORM = { startDate: todayISODate(), endDate: todayISODate(), reason:
 
 export function AdminClosures() {
   const { profile } = useProfile();
-  const isOwner = profile?.role === "owner";
+  const canManageClosures = hasFullAccess(profile);
 
   const [closures, setClosures] = useState<ApiSalonClosure[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +87,7 @@ export function AdminClosures() {
         profesional queda disponible para reservas durante ese período.
       </p>
 
-      {isOwner && (
+      {canManageClosures && (
         <form
           onSubmit={handleSubmit}
           className="tap-card mt-6 flex flex-wrap items-end gap-3 rounded-2xl border border-baby-pink/30 bg-white/60 p-4"
@@ -152,7 +153,7 @@ export function AdminClosures() {
               </p>
               {closure.reason && <p className="text-sm text-charcoal/60">{closure.reason}</p>}
             </div>
-            {isOwner && (
+            {canManageClosures && (
               <button
                 type="button"
                 disabled={busyId === closure.id}

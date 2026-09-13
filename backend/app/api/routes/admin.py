@@ -1,8 +1,9 @@
 """Administración del salón: servicios, staff, horarios y ausencias.
 
-Todas las rutas de escritura requieren sesión. Las de horarios/ausencias
-aceptan tanto al owner como al propio profesional (autogestión), el resto
-son exclusivas del owner.
+Todas las rutas de escritura requieren sesión y acceso completo (owner o los
+admins puntuales de `has_full_access`) — un staff sin ese acceso tiene la
+agenda en modo solo lectura: puede ver horarios/turnos/servicios pero no
+crear ni modificar nada, ni siquiera lo propio.
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import uuid
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_profile, require_roles
+from app.api.deps import get_current_profile, has_full_access, require_full_access, require_roles
 from app.core.errors import PermissionDenied, ResourceNotFound
 from app.db.models import Profile, Service, TimeOff, UserRole
 from app.db.session import get_session
@@ -32,6 +33,7 @@ from app.schemas.admin import (
     StaffActiveUpdate,
     StaffColorUpdate,
     StaffInviteCreate,
+    StaffInviteOut,
     StaffOut,
     StaffServicesUpdate,
     TimeOffCreate,
@@ -42,18 +44,16 @@ from app.services import admin
 router = APIRouter(tags=["administración"])
 
 
-def _require_self_or_owner(profile: Profile, staff_id: uuid.UUID) -> None:
-    if profile.role is not UserRole.owner and profile.id != staff_id:
-        raise PermissionDenied(
-            "Solo el propio profesional o el dueño del salón pueden hacer esto"
-        )
+def _require_full_access(profile: Profile) -> None:
+    if not has_full_access(profile):
+        raise PermissionDenied("Solo un admin del salón puede hacer esto")
 
 
 def _require_salon_staff(profile: Profile) -> None:
     """Lectura de horario/ausencias de cualquier profesional del salón: la
     grilla de calendario compartida necesita que un staff vea las columnas de
     sus compañeros (horario laboral, ausencias), no solo la propia. Las
-    mutaciones siguen restringidas a `_require_self_or_owner`; esto es
+    mutaciones siguen restringidas a `_require_full_access`; esto es
     exclusivamente para los GET."""
     if profile.role not in (UserRole.owner, UserRole.staff):
         raise PermissionDenied("Solo el staff o el dueño del salón pueden ver esto")
@@ -85,7 +85,7 @@ async def list_my_categories(
 @router.post("/categories", response_model=CategoryOut, status_code=201)
 async def create_category(
     payload: CategoryCreate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryOut:
     category = await admin.create_category(session, profile.salon_id, payload)
@@ -96,7 +96,7 @@ async def create_category(
 async def update_category(
     category_id: uuid.UUID,
     payload: CategoryUpdate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> CategoryOut:
     category = await admin.update_category(
@@ -108,7 +108,7 @@ async def update_category(
 @router.delete("/categories/{category_id}", status_code=204)
 async def delete_category(
     category_id: uuid.UUID,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Borrado real: los servicios que la usaban quedan sin categoría en vez
@@ -146,7 +146,7 @@ async def list_my_services(
 @router.post("/services", response_model=ServiceOut, status_code=201)
 async def create_service(
     payload: ServiceCreate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> ServiceOut:
     service = await admin.create_service(session, profile.salon_id, payload)
@@ -157,7 +157,7 @@ async def create_service(
 async def update_service(
     service_id: uuid.UUID,
     payload: ServiceUpdate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> ServiceOut:
     service = await admin.update_service(
@@ -169,7 +169,7 @@ async def update_service(
 @router.delete("/services/{service_id}", response_model=ServiceOut)
 async def deactivate_service(
     service_id: uuid.UUID,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> ServiceOut:
     """Baja lógica (`is_active = false`). Ver docstring de
@@ -181,7 +181,7 @@ async def deactivate_service(
 @router.delete("/services/{service_id}/permanent", status_code=204)
 async def delete_service_permanently(
     service_id: uuid.UUID,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Borrado real. 409 si el servicio ya tiene turnos asociados — en ese
@@ -208,17 +208,22 @@ async def list_staff_for_service(
 # --- Staff -----------------------------------------------------------------
 
 
-@router.post("/staff/invite", response_model=StaffOut, status_code=201)
+@router.post("/staff/invite", response_model=StaffInviteOut, status_code=201)
 async def invite_staff(
     payload: StaffInviteCreate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
-) -> StaffOut:
-    """Reemplaza el alta manual en Supabase: manda un mail de invitación real.
-    Owner-only a propósito, mismo criterio que `create_service`: un staff no
-    debería poder dar de alta a otro staff/owner."""
-    created = await admin.invite_staff(session, profile.salon_id, payload)
-    return StaffOut.model_validate(created)
+) -> StaffInviteOut:
+    """Reemplaza el alta manual en Supabase: crea la cuenta con una
+    contraseña temporal (sin mandar mail) y la devuelve para que la dueña se
+    la pase al staff a mano. Owner-only a propósito, mismo criterio que
+    `create_service`: un staff no debería poder dar de alta a otro
+    staff/owner."""
+    created, temporary_password = await admin.invite_staff(session, profile.salon_id, payload)
+    return StaffInviteOut(
+        **StaffOut.model_validate(created).model_dump(),
+        temporary_password=temporary_password,
+    )
 
 
 @router.get("/staff", response_model=list[StaffOut])
@@ -234,7 +239,7 @@ async def list_staff(
 async def set_staff_active(
     staff_id: uuid.UUID,
     payload: StaffActiveUpdate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> StaffOut:
     updated = await admin.set_staff_active(
@@ -247,7 +252,7 @@ async def set_staff_active(
 async def set_staff_color(
     staff_id: uuid.UUID,
     payload: StaffColorUpdate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> StaffOut:
     updated = await admin.set_staff_color(
@@ -259,7 +264,7 @@ async def set_staff_color(
 @router.delete("/staff/{staff_id}/permanent", status_code=204)
 async def delete_staff_permanently(
     staff_id: uuid.UUID,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Borrado real (incluida la cuenta de Supabase Auth). 409 si el
@@ -281,7 +286,7 @@ async def get_staff_services(
 async def set_staff_services(
     staff_id: uuid.UUID,
     payload: StaffServicesUpdate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> list[uuid.UUID]:
     return await admin.set_staff_services(
@@ -319,7 +324,7 @@ async def replace_staff_schedule_date(
     session: AsyncSession = Depends(get_session),
 ) -> list[ScheduleBlockOut]:
     """Reemplaza todos los bloques de horario de esa fecha puntual de una vez."""
-    _require_self_or_owner(profile, staff_id)
+    _require_full_access(profile)
     rows = await admin.replace_staff_schedule_date(
         session, profile.salon_id, staff_id, date, payload.blocks
     )
@@ -351,7 +356,7 @@ async def create_time_off(
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> TimeOffOut:
-    _require_self_or_owner(profile, staff_id)
+    _require_full_access(profile)
     row = await admin.create_time_off(
         session,
         profile.salon_id,
@@ -369,14 +374,12 @@ async def delete_time_off(
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
 ) -> None:
-    # Se resuelve el dueño real de la ausencia antes de autorizar: un staff
-    # no puede borrar la ausencia de otro staff, solo el owner puede.
     time_off = await session.get(TimeOff, time_off_id)
     if time_off is None or time_off.salon_id != profile.salon_id:
         raise ResourceNotFound(
             "Ausencia inexistente en este salón", time_off_id=str(time_off_id)
         )
-    _require_self_or_owner(profile, time_off.staff_id)
+    _require_full_access(profile)
     await admin.delete_time_off(session, profile.salon_id, time_off_id)
 
 
@@ -399,7 +402,7 @@ async def list_salon_closures(
 @router.post("/salon/closures", response_model=SalonClosureOut, status_code=201)
 async def create_salon_closure(
     payload: SalonClosureCreate,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> SalonClosureOut:
     row = await admin.create_salon_closure(
@@ -411,7 +414,7 @@ async def create_salon_closure(
 @router.delete("/salon/closures/{closure_id}", status_code=204)
 async def delete_salon_closure(
     closure_id: uuid.UUID,
-    profile: Profile = Depends(require_roles(UserRole.owner)),
+    profile: Profile = Depends(require_full_access),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     await admin.delete_salon_closure(session, profile.salon_id, closure_id)

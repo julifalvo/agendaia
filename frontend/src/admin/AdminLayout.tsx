@@ -1,13 +1,23 @@
-import { NavLink, Outlet, Link } from "react-router-dom";
+import { NavLink, Navigate, Outlet, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
 import { DecorBackground } from "../components/DecorBackground";
 import { LoginPanel } from "../components/LoginPanel";
 import { Logo } from "../components/Logo";
+import { hasFullAccess } from "../lib/access";
 
-const NAV_LINKS = [
+interface NavLinkDef {
+  to: string;
+  label: string;
+  end?: boolean;
+}
+
+const NAV_LINKS: NavLinkDef[] = [
   { to: "/admin", label: "Mis turnos", end: true },
   { to: "/admin/calendar", label: "Calendario" },
+];
+
+const ADMIN_ONLY_NAV_LINKS: NavLinkDef[] = [
   { to: "/admin/services", label: "Servicios" },
   { to: "/admin/staff", label: "Staff" },
   { to: "/admin/closures", label: "Bloquear agenda" },
@@ -49,6 +59,13 @@ export function AdminLayout() {
     );
   }
 
+  // Cuenta recién creada por la dueña con contraseña temporal (ver
+  // `admin.invite_staff` en el backend): no puede tocar nada del panel hasta
+  // que elija su propia contraseña.
+  if (user.user_metadata?.must_change_password === true) {
+    return <Navigate to="/set-password" replace />;
+  }
+
   if (profile && profile.role !== "owner" && profile.role !== "staff") {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-soft-white px-6">
@@ -61,6 +78,8 @@ export function AdminLayout() {
       </main>
     );
   }
+
+  const navLinks = hasFullAccess(profile) ? [...NAV_LINKS, ...ADMIN_ONLY_NAV_LINKS] : NAV_LINKS;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-soft-white">
@@ -92,7 +111,7 @@ export function AdminLayout() {
           </div>
 
           <nav className="flex w-full flex-wrap items-center gap-2 sm:order-2 sm:w-auto sm:flex-nowrap">
-            {NAV_LINKS.map((link) => (
+            {navLinks.map((link) => (
               <NavLink key={link.to} to={link.to} end={link.end} className={navLinkClass}>
                 {link.label}
               </NavLink>
@@ -106,4 +125,14 @@ export function AdminLayout() {
       </div>
     </div>
   );
+}
+
+/** Wrapper de ruta para las páginas de gestión (servicios, staff, horario de
+ * un profesional, cierres de agenda): un staff sin acceso completo tiene el
+ * panel en modo solo lectura y no debería poder llegar ahí ni escribiendo la
+ * URL a mano, aunque el nav ya no muestre el link. */
+export function RequireFullAccess() {
+  const { profile } = useProfile();
+  if (!hasFullAccess(profile)) return <Navigate to="/admin" replace />;
+  return <Outlet />;
 }

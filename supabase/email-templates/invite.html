@@ -1,0 +1,72 @@
+<!--
+  Template de Supabase Auth para "Invite user" — pegar en:
+  Dashboard del proyecto → Authentication → Emails → Invite user → Source.
+
+  Variables usadas (las provee Supabase, no tocar):
+    {{ .ConfirmationURL }}  link de invitación (obligatorio)
+    {{ .Email }}            mail de la persona invitada
+    {{ .Data.full_name }}   nombre — viene del `data.full_name` que manda
+                            backend/app/services/supabase_admin.py al invitar
+
+  HTML de tabla + estilos inline a propósito: es lo único que se renderiza
+  de forma confiable en Gmail/Outlook/Apple Mail. Nada de webfonts ni
+  gradientes en texto (mal soporte); los colores son sólidos, tomados 1 a 1
+  de la paleta de la app (frontend/src/index.css) para que el mail se sienta
+  parte de la misma marca y no del template genérico de Supabase.
+-->
+<div style="margin:0; padding:32px 16px; background-color:#fff3f7; font-family:Georgia, 'Times New Roman', serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px; margin:0 auto; background-color:#ffffff; border-radius:20px; overflow:hidden; border:1px solid #f9c2d4;">
+    <tr>
+      <td style="height:4px; background-color:#ff6fa0; font-size:0; line-height:0;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="padding:40px 36px 8px; text-align:center;">
+        <div style="font-family:Georgia, 'Times New Roman', serif; font-size:34px; font-weight:700; color:#ff6fa0; line-height:1;">MC</div>
+        <div style="margin-top:6px; font-family:Arial, Helvetica, sans-serif; font-size:13px; font-weight:700; letter-spacing:6px; color:#4a3540;">STUDIO</div>
+        <div style="margin-top:4px; font-family:Arial, Helvetica, sans-serif; font-size:9px; font-weight:600; letter-spacing:2px; color:#e0a94e;">NAILS &amp; BEAUTY</div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 36px 0; text-align:center;">
+        <h1 style="margin:0; font-family:Georgia, 'Times New Roman', serif; font-size:24px; font-weight:700; color:#4a3540;">
+          ¡Te sumás al equipo!
+        </h1>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:16px 36px 0; text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:15px; line-height:1.6; color:#4a3540;">
+        {{ if .Data.full_name }}Hola {{ .Data.full_name }},{{ else }}¡Hola!{{ end }}
+        <br /><br />
+        Te invitamos a sumarte como profesional de <strong>MC Studio</strong>.
+        Con tu cuenta vas a poder gestionar tu agenda y tus turnos desde el
+        panel del salón. Para activarla, creá tu contraseña acá abajo.
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:28px 36px 8px; text-align:center;">
+        <a href="{{ .ConfirmationURL }}"
+           style="display:inline-block; padding:14px 36px; background-color:#ff6fa0; color:#ffffff; font-family:Arial, Helvetica, sans-serif; font-size:14px; font-weight:700; letter-spacing:0.3px; text-decoration:none; border-radius:999px;">
+          Crear mi contraseña
+        </a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 36px 0; text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:1.5; color:#4a3540; opacity:0.55;">
+        Si el botón no funciona, copiá y pegá este link en tu navegador:
+        <br />
+        <a href="{{ .ConfirmationURL }}" style="color:#e0a94e; word-break:break-all;">{{ .ConfirmationURL }}</a>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:32px 36px 28px;">
+        <div style="height:1px; background-color:#f9c2d4; margin-bottom:20px;"></div>
+        <p style="margin:0; text-align:center; font-family:Arial, Helvetica, sans-serif; font-size:11px; line-height:1.6; color:#4a3540; opacity:0.5;">
+          Este mail se envió a {{ .Email }} porque alguien del equipo de MC
+          Studio te invitó a crear una cuenta en el panel del salón. Si no
+          esperabas esta invitación, podés ignorarlo con tranquilidad — no se
+          va a crear ninguna cuenta sin que hagas clic en el botón.
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>

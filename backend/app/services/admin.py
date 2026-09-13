@@ -8,6 +8,8 @@ alcanzable, ni por accidente.
 from __future__ import annotations
 
 import datetime as dt
+import secrets
+import string
 import uuid
 
 from sqlalchemy import delete, func, select
@@ -274,16 +276,31 @@ async def _next_staff_color(session: AsyncSession, salon_id: uuid.UUID) -> str:
     return _STAFF_COLOR_PALETTE[(count or 0) % len(_STAFF_COLOR_PALETTE)]
 
 
+_TEMP_PASSWORD_ALPHABET = string.ascii_letters + string.digits
+
+
+def _generate_temp_password(length: int = 12) -> str:
+    return "".join(secrets.choice(_TEMP_PASSWORD_ALPHABET) for _ in range(length))
+
+
 async def invite_staff(
     session: AsyncSession, salon_id: uuid.UUID, data: StaffInviteCreate
-) -> Profile:
-    """Crea el usuario en Supabase Auth (manda mail de invitación) y le
-    asigna el rol real. El trigger de alta siempre crea el profile con
-    `role = 'client'` (ver la migración que endurece `handle_new_user`); acá
-    lo corregimos con un UPDATE de confianza hecho por el backend, que no
-    pasa por RLS.
+) -> tuple[Profile, str]:
+    """Crea el usuario en Supabase Auth con una contraseña temporal generada
+    acá (sin mandar mail) y le asigna el rol real. El trigger de alta siempre
+    crea el profile con `role = 'client'` (ver la migración que endurece
+    `handle_new_user`); acá lo corregimos con un UPDATE de confianza hecho
+    por el backend, que no pasa por RLS.
+
+    Devuelve la contraseña temporal junto con el profile: es la única vez
+    que existe en texto plano de este lado, la dueña se la pasa al staff a
+    mano. `must_change_password` en el metadata del usuario (ver
+    `supabase_admin.create_staff_user`) obliga a cambiarla en el primer login.
     """
-    user = await supabase_admin.invite_user(data.email, data.full_name, salon_id)
+    temporary_password = _generate_temp_password()
+    user = await supabase_admin.create_staff_user(
+        data.email, data.full_name, salon_id, temporary_password
+    )
     try:
         profile_id = uuid.UUID(user["id"])
     except (KeyError, ValueError, TypeError) as exc:
@@ -302,7 +319,7 @@ async def invite_staff(
     profile.color = await _next_staff_color(session, salon_id)
     await session.commit()
     await session.refresh(profile)
-    return profile
+    return profile, temporary_password
 
 
 async def list_staff(session: AsyncSession, salon_id: uuid.UUID) -> list[Profile]:

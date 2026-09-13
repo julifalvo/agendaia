@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet, ApiError } from "../lib/api";
+import { hasFullAccess } from "../lib/access";
 import { haptic } from "../lib/haptics";
 import { useProfile } from "../hooks/useProfileContext";
 import { cancelBooking as cancelBookingAction, setBookingPaymentStatus, transitionBooking } from "./bookingActions";
@@ -50,7 +51,8 @@ function dayLabel(iso: string, today: string, tomorrow: string): string {
 
 export function AdminMyBookings() {
   const { profile } = useProfile();
-  const [onlyMine, setOnlyMine] = useState(profile?.role === "staff");
+  const canViewAllStaff = hasFullAccess(profile);
+  const [onlyMine, setOnlyMine] = useState(!canViewAllStaff);
   const [onlyPending, setOnlyPending] = useState(false);
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [services, setServices] = useState<Record<string, ApiService>>({});
@@ -93,9 +95,13 @@ export function AdminMyBookings() {
   }, [load]);
 
   const scoped = useMemo(
-    () => (onlyMine && profile ? bookings.filter((b) => b.staff_id === profile.id) : bookings),
-    [bookings, onlyMine, profile],
+    () =>
+      (onlyMine || !canViewAllStaff) && profile
+        ? bookings.filter((b) => b.staff_id === profile.id)
+        : bookings,
+    [bookings, onlyMine, profile, canViewAllStaff],
   );
+  const showProfessional = canViewAllStaff && !onlyMine;
 
   const pendingCount = useMemo(() => scoped.filter((b) => b.status === "pending").length, [scoped]);
 
@@ -172,30 +178,32 @@ export function AdminMyBookings() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <div className="inline-flex rounded-full border border-charcoal/15 bg-white/60 p-1">
-          <button
-            type="button"
-            onClick={() => setOnlyMine(true)}
-            className={`tap-btn rounded-full px-4 py-1.5 text-sm transition-all ${
-              onlyMine
-                ? "bg-gradient-to-r from-bubblegum to-champagne text-white"
-                : "text-charcoal/60 hover:text-charcoal"
-            }`}
-          >
-            Solo mis turnos
-          </button>
-          <button
-            type="button"
-            onClick={() => setOnlyMine(false)}
-            className={`tap-btn rounded-full px-4 py-1.5 text-sm transition-all ${
-              !onlyMine
-                ? "bg-gradient-to-r from-bubblegum to-champagne text-white"
-                : "text-charcoal/60 hover:text-charcoal"
-            }`}
-          >
-            Todo el salón
-          </button>
-        </div>
+        {canViewAllStaff && (
+          <div className="inline-flex rounded-full border border-charcoal/15 bg-white/60 p-1">
+            <button
+              type="button"
+              onClick={() => setOnlyMine(true)}
+              className={`tap-btn rounded-full px-4 py-1.5 text-sm transition-all ${
+                onlyMine
+                  ? "bg-gradient-to-r from-bubblegum to-champagne text-white"
+                  : "text-charcoal/60 hover:text-charcoal"
+              }`}
+            >
+              Solo mis turnos
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyMine(false)}
+              className={`tap-btn rounded-full px-4 py-1.5 text-sm transition-all ${
+                !onlyMine
+                  ? "bg-gradient-to-r from-bubblegum to-champagne text-white"
+                  : "text-charcoal/60 hover:text-charcoal"
+              }`}
+            >
+              Todo el salón
+            </button>
+          </div>
+        )}
 
         <div className="inline-flex rounded-full border border-charcoal/15 bg-white/60 p-1">
           <button
@@ -283,7 +291,7 @@ export function AdminMyBookings() {
                         <p className="text-charcoal">{service?.name ?? "Servicio"}</p>
                         <p className="text-sm text-charcoal/60">
                           {clientLabel}
-                          {!onlyMine && <> · con {professional?.full_name ?? "profesional"}</>}
+                          {showProfessional && <> · con {professional?.full_name ?? "profesional"}</>}
                         </p>
                       </div>
                     </div>
@@ -306,77 +314,79 @@ export function AdminMyBookings() {
                       </span>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {booking.payment_status === "paid" ? (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void setPaymentStatus(booking.id, "pending")}
-                          className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
-                        >
-                          Deshacer seña recibida
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void setPaymentStatus(booking.id, "paid")}
-                          className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                        >
-                          Marcar seña recibida
-                        </button>
-                      )}
-                      {booking.status === "pending" && (
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void transition(booking.id, "confirmed")}
-                          className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
-                        >
-                          Confirmar
-                        </button>
-                      )}
-                      {booking.status === "confirmed" && (
-                        <>
+                    {canViewAllStaff && (
+                      <div className="flex flex-wrap gap-2">
+                        {booking.payment_status === "paid" ? (
                           <button
                             type="button"
                             disabled={isBusy}
-                            onClick={() => void transition(booking.id, "completed")}
+                            onClick={() => void setPaymentStatus(booking.id, "pending")}
+                            className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                          >
+                            Deshacer seña recibida
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void setPaymentStatus(booking.id, "paid")}
+                            className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                          >
+                            Marcar seña recibida
+                          </button>
+                        )}
+                        {booking.status === "pending" && (
+                          <button
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void transition(booking.id, "confirmed")}
                             className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
                           >
-                            Completar
+                            Confirmar
                           </button>
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => void transition(booking.id, "no_show")}
-                            className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
-                          >
-                            No asistió
-                          </button>
-                        </>
-                      )}
-                      {(booking.status === "pending" || booking.status === "confirmed") && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => setEditingBooking(booking)}
-                            className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
-                          >
-                            Editar horario
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => void cancel(booking.id)}
-                            className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
-                          >
-                            Cancelar
-                          </button>
-                        </>
-                      )}
-                    </div>
+                        )}
+                        {booking.status === "confirmed" && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => void transition(booking.id, "completed")}
+                              className="tap-btn rounded-full bg-baby-pink px-3 py-1.5 text-xs font-medium text-charcoal transition-colors hover:bg-bubblegum hover:text-white disabled:opacity-50"
+                            >
+                              Completar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => void transition(booking.id, "no_show")}
+                              className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                            >
+                              No asistió
+                            </button>
+                          </>
+                        )}
+                        {(booking.status === "pending" || booking.status === "confirmed") && (
+                          <>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => setEditingBooking(booking)}
+                              className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                            >
+                              Editar horario
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => void cancel(booking.id)}
+                              className="tap-btn rounded-full border border-charcoal/20 px-3 py-1.5 text-xs text-charcoal/70 transition-colors hover:border-charcoal/40 disabled:opacity-50"
+                            >
+                              Cancelar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -388,7 +398,11 @@ export function AdminMyBookings() {
       {editingBooking && (
         <BookingEditModal
           booking={editingBooking}
-          staffOptions={Object.values(staff)}
+          staffOptions={
+            canViewAllStaff
+              ? Object.values(staff)
+              : Object.values(staff).filter((s) => s.id === profile?.id)
+          }
           onClose={() => setEditingBooking(null)}
           onChanged={load}
         />

@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { apiGet, apiPost, apiDelete, ApiError } from "../lib/api";
+import { hasFullAccess } from "../lib/access";
 import { useProfile } from "../hooks/useProfileContext";
 import { rescheduleBooking } from "./bookingActions";
 import { BookingEditModal } from "./BookingEditModal";
-import { todayISODate } from "./bookingLabels";
+import { toLocalDateInput, todayISODate } from "./bookingLabels";
 import type {
   ApiBooking,
   ApiGoogleCalendarBlock,
@@ -17,7 +18,9 @@ import type {
   ApiStaff,
 } from "../types/api";
 
-// --- Grilla: un día, 08:00–21:00 en bloques de 30' -------------------------
+// --- Grilla: 08:00–21:00 en bloques de 30' ----------------------------------
+// Los admins ven un día con una columna por profesional; el resto del staff
+// ve su propia semana con una columna por día (ver `canViewAllStaff`).
 
 const DAY_START_MIN = 8 * 60;
 const DAY_END_MIN = 21 * 60;
@@ -38,12 +41,34 @@ function addDaysISO(iso: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Lunes de la semana (ISO 8601) que contiene `iso`. */
+function mondayOfISO(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  return addDaysISO(iso, diff);
+}
+
 function formatDateLabel(iso: string): string {
   return new Date(`${iso}T00:00:00`).toLocaleDateString("es-AR", {
     weekday: "long",
     day: "numeric",
     month: "long",
   });
+}
+
+function formatWeekRangeLabel(startIso: string, endIso: string): string {
+  const start = new Date(`${startIso}T00:00:00`);
+  const end = new Date(`${endIso}T00:00:00`);
+  const startLabel = start.toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  const endLabel = end.toLocaleDateString("es-AR", { day: "numeric", month: "long" });
+  return `Semana del ${startLabel} al ${endLabel}`;
+}
+
+function formatDayColumnLabel(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  const weekday = d.toLocaleDateString("es-AR", { weekday: "short" }).replace(".", "");
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${d.getDate()}`;
 }
 
 function timeStringToMinutes(value: string): number {
@@ -64,10 +89,22 @@ function minutesToTimeLabel(totalMinutes: number): string {
 
 interface CreateForm {
   staffId: string;
+  date: string;
   serviceId: string;
   time: string;
   guestName: string;
   guestPhone: string;
+}
+
+/** Una columna de la grilla: profesional (vista admin) o día (vista semanal
+ * de un staff sin acceso completo). Cada una fija un (fecha, profesional). */
+interface CalendarColumn {
+  key: string;
+  label: string;
+  color: string | null;
+  date: string;
+  staffId: string;
+  isToday: boolean;
 }
 
 export function AdminCalendar() {
@@ -79,6 +116,7 @@ export function AdminCalendar() {
   const [services, setServices] = useState<ApiService[]>([]);
   const [bookings, setBookings] = useState<ApiBooking[]>([]);
   const [scheduleByStaff, setScheduleByStaff] = useState<Record<string, ApiScheduleBlock[]>>({});
+  const [scheduleWeek, setScheduleWeek] = useState<ApiScheduleBlock[]>([]);
   const [closures, setClosures] = useState<ApiSalonClosure[]>([]);
   const [googleBlocks, setGoogleBlocks] = useState<ApiGoogleCalendarBlock[]>([]);
   const [googleStatus, setGoogleStatus] = useState<ApiGoogleCalendarStatus | null>(null);
@@ -91,7 +129,7 @@ export function AdminCalendar() {
   const [editingBooking, setEditingBooking] = useState<ApiBooking | null>(null);
   // Reprogramar por arrastre con Pointer Events (no HTML5 drag-and-drop, que
   // no dispara en pantallas táctiles) — funciona igual con mouse y con dedo.
-  const [drag, setDrag] = useState<{ booking: ApiBooking; staffId: string; slotIndex: number } | null>(
+  const [drag, setDrag] = useState<{ booking: ApiBooking; colKey: string; slotIndex: number } | null>(
     null,
   );
   const pendingDragRef = useRef<{ booking: ApiBooking; pointerId: number; x: number; y: number } | null>(
@@ -104,19 +142,59 @@ export function AdminCalendar() {
   const isOwner = profile?.role === "owner";
   const canManageGoogleCalendar =
     isOwner && profile?.email?.toLowerCase() === GOOGLE_CALENDAR_ALLOWED_EMAIL;
+  const canViewAllStaff = hasFullAccess(profile);
   const activeStaff = useMemo(() => staff.filter((s) => s.is_active), [staff]);
-  const manageableStaff = useMemo(
-    () => activeStaff.filter((s) => canManage(s.id)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [activeStaff, isOwner, profile?.id],
+  const visibleStaff = useMemo(
+    () => (canViewAllStaff ? activeStaff : activeStaff.filter((s) => s.id === profile?.id)),
+    [activeStaff, canViewAllStaff, profile?.id],
   );
+  // Solo un admin (ver `canViewAllStaff`) puede cargar turnos; el resto del
+  // staff tiene la agenda en modo solo lectura.
+  const manageableStaff = useMemo(
+    () => (canViewAllStaff ? activeStaff : []),
+    [activeStaff, canViewAllStaff],
+  );
+
+  // Un staff sin acceso completo ve su semana (columnas = días); los admins
+  // ven un día con columnas = profesionales.
+  const weekDays = useMemo(() => {
+    if (canViewAllStaff) return [];
+    const start = mondayOfISO(date);
+    return Array.from({ length: 7 }, (_, i) => addDaysISO(start, i));
+  }, [date, canViewAllStaff]);
+
+  const columns: CalendarColumn[] = useMemo(() => {
+    const today = todayISODate();
+    if (canViewAllStaff) {
+      return visibleStaff.map((s) => ({
+        key: s.id,
+        label: s.full_name,
+        color: s.color,
+        date,
+        staffId: s.id,
+        isToday: date === today,
+      }));
+    }
+    if (!profile) return [];
+    const selfColor = visibleStaff[0]?.color ?? null;
+    return weekDays.map((iso) => ({
+      key: iso,
+      label: formatDayColumnLabel(iso),
+      color: selfColor,
+      date: iso,
+      staffId: profile.id,
+      isToday: iso === today,
+    }));
+  }, [canViewAllStaff, visibleStaff, date, weekDays, profile]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const dayStart = new Date(`${date}T00:00:00`);
-      const dayEnd = new Date(`${date}T23:59:59.999`);
+      const rangeStartIso = canViewAllStaff ? date : mondayOfISO(date);
+      const rangeEndIso = canViewAllStaff ? date : addDaysISO(rangeStartIso, 6);
+      const dayStart = new Date(`${rangeStartIso}T00:00:00`);
+      const dayEnd = new Date(`${rangeEndIso}T23:59:59.999`);
       const params = new URLSearchParams({
         date_from: dayStart.toISOString(),
         date_to: dayEnd.toISOString(),
@@ -135,16 +213,23 @@ export function AdminCalendar() {
       setClosures(closureRows);
       setGoogleBlocks(blockRows);
 
-      const activeIds = staffRows.filter((s) => s.is_active).map((s) => s.id);
-      const scheduleEntries = await Promise.all(
-        activeIds.map(async (staffId) => {
-          const blocks = await apiGet<ApiScheduleBlock[]>(
-            `/staff/${staffId}/schedule?date_from=${date}&date_to=${date}`,
-          );
-          return [staffId, blocks] as const;
-        }),
-      );
-      setScheduleByStaff(Object.fromEntries(scheduleEntries));
+      if (canViewAllStaff) {
+        const activeIds = staffRows.filter((s) => s.is_active).map((s) => s.id);
+        const scheduleEntries = await Promise.all(
+          activeIds.map(async (staffId) => {
+            const blocks = await apiGet<ApiScheduleBlock[]>(
+              `/staff/${staffId}/schedule?date_from=${date}&date_to=${date}`,
+            );
+            return [staffId, blocks] as const;
+          }),
+        );
+        setScheduleByStaff(Object.fromEntries(scheduleEntries));
+      } else if (profile) {
+        const blocks = await apiGet<ApiScheduleBlock[]>(
+          `/staff/${profile.id}/schedule?date_from=${rangeStartIso}&date_to=${rangeEndIso}`,
+        );
+        setScheduleWeek(blocks);
+      }
 
       if (canManageGoogleCalendar) {
         setGoogleStatus(await apiGet<ApiGoogleCalendarStatus>("/admin/google-calendar/status"));
@@ -155,7 +240,7 @@ export function AdminCalendar() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, canManageGoogleCalendar]);
+  }, [date, canManageGoogleCalendar, canViewAllStaff, profile?.id]);
 
   useEffect(() => {
     void load();
@@ -172,10 +257,16 @@ export function AdminCalendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function isWorking(staffId: string, slotIndex: number): boolean {
+  function workingBlocksFor(col: CalendarColumn): ApiScheduleBlock[] {
+    return canViewAllStaff
+      ? scheduleByStaff[col.staffId] ?? []
+      : scheduleWeek.filter((b) => b.date === col.date);
+  }
+
+  function isWorking(col: CalendarColumn, slotIndex: number): boolean {
     const slotStart = DAY_START_MIN + slotIndex * SLOT_MIN;
     const slotEnd = slotStart + SLOT_MIN;
-    const blocks = scheduleByStaff[staffId] ?? [];
+    const blocks = workingBlocksFor(col);
     return blocks.some(
       (b) =>
         timeStringToMinutes(b.start_time) <= slotStart &&
@@ -183,21 +274,25 @@ export function AdminCalendar() {
     );
   }
 
-  function canManage(staffId: string): boolean {
-    return isOwner || profile?.id === staffId;
+  function bookingsFor(col: CalendarColumn): ApiBooking[] {
+    return bookings.filter(
+      (b) =>
+        b.staff_id === col.staffId &&
+        b.status !== "cancelled" &&
+        toLocalDateInput(b.start_time) === col.date,
+    );
   }
 
-  function bookingsFor(staffId: string): ApiBooking[] {
-    return bookings.filter((b) => b.staff_id === staffId && b.status !== "cancelled");
+  function googleBlocksFor(col: CalendarColumn): ApiGoogleCalendarBlock[] {
+    return googleBlocks.filter(
+      (b) => b.staff_id === col.staffId && toLocalDateInput(b.starts_at) === col.date,
+    );
   }
 
-  function googleBlocksFor(staffId: string): ApiGoogleCalendarBlock[] {
-    return googleBlocks.filter((b) => b.staff_id === staffId);
-  }
-
-  const salonWideBands = useMemo(() => {
+  function bandsFor(col: CalendarColumn): { top: number; height: number; label: string }[] {
     const bands: { top: number; height: number; label: string }[] = [];
     for (const closure of closures) {
+      if (toLocalDateInput(closure.starts_at) !== col.date) continue;
       bands.push({
         top: (localMinutesSinceMidnight(closure.starts_at) - DAY_START_MIN) * PX_PER_MIN,
         height:
@@ -207,6 +302,7 @@ export function AdminCalendar() {
       });
     }
     for (const block of googleBlocks.filter((b) => b.staff_id === null)) {
+      if (toLocalDateInput(block.starts_at) !== col.date) continue;
       bands.push({
         top: (localMinutesSinceMidnight(block.starts_at) - DAY_START_MIN) * PX_PER_MIN,
         height:
@@ -216,14 +312,15 @@ export function AdminCalendar() {
       });
     }
     return bands;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [closures, googleBlocks]);
+  }
 
-  function openCreate(staffId: string, slotIndex: number) {
-    if (!canManage(staffId)) return;
+  function openCreate(colKey: string, slotIndex: number) {
+    const col = columns.find((c) => c.key === colKey);
+    if (!col || !canViewAllStaff) return;
     const minutes = DAY_START_MIN + slotIndex * SLOT_MIN;
     setCreateSlot({
-      staffId,
+      staffId: col.staffId,
+      date: col.date,
       serviceId: services[0]?.id ?? "",
       time: minutesToTimeLabel(minutes),
       guestName: "",
@@ -233,8 +330,15 @@ export function AdminCalendar() {
 
   function openCreateGlobal() {
     if (manageableStaff.length === 0) return;
+    const staffId = manageableStaff[0].id;
+    const today = todayISODate();
+    const defaultCol =
+      columns.find((c) => c.staffId === staffId && c.date === today) ??
+      columns.find((c) => c.staffId === staffId) ??
+      columns[0];
     setCreateSlot({
-      staffId: manageableStaff[0].id,
+      staffId,
+      date: defaultCol?.date ?? date,
       serviceId: services[0]?.id ?? "",
       time: minutesToTimeLabel(DAY_START_MIN),
       guestName: "",
@@ -248,7 +352,7 @@ export function AdminCalendar() {
     setBusy(true);
     setError(null);
     try {
-      const startTime = new Date(`${date}T${createSlot.time}:00`).toISOString();
+      const startTime = new Date(`${createSlot.date}T${createSlot.time}:00`).toISOString();
       await apiPost("/bookings", {
         salon_id: profile.salon_id,
         service_id: createSlot.serviceId,
@@ -267,7 +371,7 @@ export function AdminCalendar() {
   }
 
   function openEdit(booking: ApiBooking) {
-    if (!canManage(booking.staff_id)) return;
+    if (!canViewAllStaff) return;
     setEditingBooking(booking);
   }
 
@@ -275,17 +379,22 @@ export function AdminCalendar() {
     return Math.round((localMinutesSinceMidnight(booking.start_time) - DAY_START_MIN) / SLOT_MIN);
   }
 
-  async function commitReschedule(booking: ApiBooking, staffId: string, slotIndex: number) {
-    if (!canManage(staffId) || !canManage(booking.staff_id)) return;
-    if (slotIndex < 0 || slotIndex >= SLOT_COUNT || !isWorking(staffId, slotIndex)) return;
+  async function commitReschedule(booking: ApiBooking, colKey: string, slotIndex: number) {
+    const col = columns.find((c) => c.key === colKey);
+    if (!col || !canViewAllStaff) return;
+    if (slotIndex < 0 || slotIndex >= SLOT_COUNT || !isWorking(col, slotIndex)) return;
     const snapped = DAY_START_MIN + slotIndex * SLOT_MIN;
-    if (snapped === localMinutesSinceMidnight(booking.start_time) && staffId === booking.staff_id) return;
+    const unchanged =
+      snapped === localMinutesSinceMidnight(booking.start_time) &&
+      col.staffId === booking.staff_id &&
+      col.date === toLocalDateInput(booking.start_time);
+    if (unchanged) return;
 
     setBusy(true);
     setError(null);
     try {
-      const startTime = new Date(`${date}T${minutesToTimeLabel(snapped)}:00`).toISOString();
-      await rescheduleBooking(booking.id, startTime, staffId);
+      const startTime = new Date(`${col.date}T${minutesToTimeLabel(snapped)}:00`).toISOString();
+      await rescheduleBooking(booking.id, startTime, col.staffId);
       await load();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "No se pudo reprogramar el turno");
@@ -295,7 +404,7 @@ export function AdminCalendar() {
   }
 
   function handleBookingPointerDown(event: PointerEvent<HTMLButtonElement>, booking: ApiBooking) {
-    if (!canManage(booking.staff_id)) return;
+    if (!canViewAllStaff) return;
     // Progressive enhancement: si el navegador no soporta pointer capture,
     // el drag sigue funcionando vía elementFromPoint, solo es menos robusto
     // si el dedo sale de los límites del botón.
@@ -314,22 +423,26 @@ export function AdminCalendar() {
       // Umbral chico para no confundir un tap con un drag apenas empieza.
       if (Math.hypot(dx, dy) < 6) return;
       dragMovedRef.current = true;
+      const bookingDate = toLocalDateInput(pending.booking.start_time);
+      const initialCol = columns.find(
+        (c) => c.staffId === pending.booking.staff_id && c.date === bookingDate,
+      );
       setDrag({
         booking: pending.booking,
-        staffId: pending.booking.staff_id,
+        colKey: initialCol?.key ?? pending.booking.staff_id,
         slotIndex: currentSlotIndex(pending.booking),
       });
     }
 
     const target = document.elementFromPoint(event.clientX, event.clientY);
-    const column = target?.closest<HTMLElement>("[data-staff-col]");
+    const column = target?.closest<HTMLElement>("[data-col-key]");
     if (!column) return;
-    const staffId = column.dataset.staffCol!;
+    const colKey = column.dataset.colKey!;
     const rect = column.getBoundingClientRect();
     const rawMinutes = DAY_START_MIN + (event.clientY - rect.top) / PX_PER_MIN;
     const snapped = Math.round(rawMinutes / SLOT_MIN) * SLOT_MIN;
     const slotIndex = Math.min(Math.max((snapped - DAY_START_MIN) / SLOT_MIN, 0), SLOT_COUNT - 1);
-    setDrag((d) => (d ? { ...d, staffId, slotIndex } : d));
+    setDrag((d) => (d ? { ...d, colKey, slotIndex } : d));
   }
 
   async function handleBookingPointerUp(event: PointerEvent<HTMLButtonElement>) {
@@ -340,7 +453,7 @@ export function AdminCalendar() {
     if (dragMovedRef.current && drag) {
       const finalDrag = drag;
       setDrag(null);
-      await commitReschedule(finalDrag.booking, finalDrag.staffId, finalDrag.slotIndex);
+      await commitReschedule(finalDrag.booking, finalDrag.colKey, finalDrag.slotIndex);
     }
   }
 
@@ -405,25 +518,34 @@ export function AdminCalendar() {
     return marks;
   }, []);
 
+  const dateLabel = canViewAllStaff
+    ? formatDateLabel(date)
+    : formatWeekRangeLabel(weekDays[0] ?? date, weekDays[6] ?? date);
+  const stepDays = canViewAllStaff ? 1 : 7;
+  const prevLabel = canViewAllStaff ? "← Ayer" : "← Semana anterior";
+  const nextLabel = canViewAllStaff ? "Mañana →" : "Semana siguiente →";
+
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-2xl text-charcoal">Calendario</h2>
         <div className="flex flex-wrap items-center gap-2">
+          {canViewAllStaff && (
+            <button
+              type="button"
+              disabled={manageableStaff.length === 0}
+              onClick={openCreateGlobal}
+              className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              + Nuevo turno
+            </button>
+          )}
           <button
             type="button"
-            disabled={manageableStaff.length === 0}
-            onClick={openCreateGlobal}
-            className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            + Nuevo turno
-          </button>
-          <button
-            type="button"
-            onClick={() => setDate((d) => addDaysISO(d, -1))}
+            onClick={() => setDate((d) => addDaysISO(d, -stepDays))}
             className="tap-btn rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
           >
-            ← Ayer
+            {prevLabel}
           </button>
           <input
             type="date"
@@ -433,14 +555,14 @@ export function AdminCalendar() {
           />
           <button
             type="button"
-            onClick={() => setDate((d) => addDaysISO(d, 1))}
+            onClick={() => setDate((d) => addDaysISO(d, stepDays))}
             className="tap-btn rounded-full border border-charcoal/15 px-3 py-1.5 text-sm text-charcoal/60 hover:border-charcoal/40"
           >
-            Mañana →
+            {nextLabel}
           </button>
         </div>
       </div>
-      <p className="mt-1 text-sm capitalize text-charcoal/60">{formatDateLabel(date)}</p>
+      <p className="mt-1 text-sm capitalize text-charcoal/60">{dateLabel}</p>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       {notice && <p className="mt-3 text-sm text-champagne">{notice}</p>}
@@ -495,9 +617,9 @@ export function AdminCalendar() {
         </div>
       )}
 
-      {activeStaff.length > 0 && (
+      {canViewAllStaff && visibleStaff.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-3">
-          {activeStaff.map((member) => (
+          {visibleStaff.map((member) => (
             <span key={member.id} className="flex items-center gap-1.5 text-xs text-charcoal/60">
               <span
                 className="h-3 w-3 rounded-full"
@@ -511,20 +633,22 @@ export function AdminCalendar() {
 
       {loading && <p className="mt-6 text-sm text-charcoal/50">Cargando...</p>}
 
-      {!loading && activeStaff.length === 0 && (
+      {!loading && columns.length === 0 && (
         <p className="mt-6 text-sm text-charcoal/50">No hay profesionales activos.</p>
       )}
 
-      {!loading && activeStaff.length > 1 && (
+      {!loading && columns.length > 1 && (
         <p className="mt-6 text-xs text-charcoal/40 sm:hidden">
-          Deslizá para ver el resto de las profesionales →
+          {canViewAllStaff
+            ? "Deslizá para ver el resto de las profesionales →"
+            : "Deslizá para ver el resto de la semana →"}
         </p>
       )}
 
-      {!loading && activeStaff.length > 0 && (
+      {!loading && columns.length > 0 && (
         <div
           className={`flex overflow-x-auto rounded-2xl border border-baby-pink/30 bg-white/60 p-4 ${
-            activeStaff.length > 1 ? "mt-2" : "mt-6"
+            columns.length > 1 ? "mt-2" : "mt-6"
           }`}
         >
           <div className="shrink-0" style={{ width: 56 }}>
@@ -543,44 +667,49 @@ export function AdminCalendar() {
           </div>
 
           <div className="relative flex flex-1">
-            {salonWideBands.map((band, i) => (
-              <div
-                key={i}
-                title={band.label}
-                className="pointer-events-none absolute inset-x-0 z-10 flex items-center justify-center overflow-hidden bg-charcoal/10 text-[10px] text-charcoal/50"
-                style={{ top: 24 + band.top, height: Math.max(band.height, 4) }}
-              >
-                {band.label}
-              </div>
-            ))}
-
-            {activeStaff.map((member) => (
-              <div key={member.id} className="min-w-[140px] flex-1 border-l border-charcoal/10">
+            {columns.map((col) => (
+              <div key={col.key} className="min-w-[140px] flex-1 border-l border-charcoal/10">
                 <div
-                  className="truncate px-2 text-center text-sm font-medium"
-                  style={{ height: 24, color: member.color ?? undefined }}
+                  className={`truncate px-2 text-center text-sm font-medium ${
+                    col.isToday && !canViewAllStaff ? "text-champagne" : ""
+                  }`}
+                  style={{ height: 24, color: canViewAllStaff ? col.color ?? undefined : undefined }}
                 >
-                  {member.full_name}
+                  {col.label}
                 </div>
                 <div
-                  data-staff-col={member.id}
+                  data-col-key={col.key}
                   className={`relative transition-colors ${
-                    drag?.staffId === member.id ? "bg-champagne/10" : ""
+                    drag?.colKey === col.key ? "bg-champagne/10" : ""
                   }`}
                   style={{ height: GRID_HEIGHT_PX }}
                 >
+                  {bandsFor(col).map((band, i) => (
+                    <div
+                      key={i}
+                      title={band.label}
+                      className="pointer-events-none absolute inset-x-0 z-10 flex items-center justify-center overflow-hidden bg-charcoal/10 text-[10px] text-charcoal/50"
+                      style={{ top: band.top, height: Math.max(band.height, 4) }}
+                    >
+                      {band.label}
+                    </div>
+                  ))}
+
                   {Array.from({ length: SLOT_COUNT }).map((_, slotIndex) => {
-                    const working = isWorking(member.id, slotIndex);
+                    const working = isWorking(col, slotIndex);
+                    const interactive = working && canViewAllStaff;
                     return (
                       <button
                         key={slotIndex}
                         type="button"
-                        disabled={!working || !canManage(member.id)}
-                        onClick={() => openCreate(member.id, slotIndex)}
+                        disabled={!interactive}
+                        onClick={() => openCreate(col.key, slotIndex)}
                         className={`absolute inset-x-0 border-b border-charcoal/5 transition-colors ${
-                          working
+                          interactive
                             ? "cursor-pointer hover:bg-champagne/10 active:bg-champagne/20"
-                            : "cursor-default bg-charcoal/[0.03]"
+                            : working
+                              ? "cursor-default"
+                              : "cursor-default bg-charcoal/[0.03]"
                         }`}
                         style={{ top: slotIndex * ROW_PX, height: ROW_PX }}
                         aria-label={`Crear turno ${minutesToTimeLabel(DAY_START_MIN + slotIndex * SLOT_MIN)}`}
@@ -588,7 +717,7 @@ export function AdminCalendar() {
                     );
                   })}
 
-                  {googleBlocksFor(member.id).map((block) => (
+                  {googleBlocksFor(col).map((block) => (
                     <div
                       key={block.id}
                       title={block.summary ?? "Bloqueado (Google)"}
@@ -605,7 +734,7 @@ export function AdminCalendar() {
                     />
                   ))}
 
-                  {bookingsFor(member.id).map((booking) => {
+                  {bookingsFor(col).map((booking) => {
                     const service = services.find((s) => s.id === booking.service_id);
                     const clientLabel = booking.client_name ?? booking.guest_name ?? "Cliente";
                     const top = (localMinutesSinceMidnight(booking.start_time) - DAY_START_MIN) * PX_PER_MIN;
@@ -627,14 +756,14 @@ export function AdminCalendar() {
                           openEdit(booking);
                         }}
                         className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm transition-[filter,box-shadow] duration-150 hover:z-30 hover:shadow-lg hover:brightness-110 active:brightness-90 ${
-                          canManage(booking.staff_id) ? "cursor-grab active:cursor-grabbing" : ""
+                          canViewAllStaff ? "cursor-grab active:cursor-grabbing" : "cursor-default"
                         }`}
                         style={{
                           top,
                           height,
-                          backgroundColor: member.color ?? "#999999",
+                          backgroundColor: col.color ?? "#999999",
                           opacity: isBeingDragged ? 0.35 : booking.status === "no_show" ? 0.5 : 1,
-                          touchAction: canManage(booking.staff_id) ? "none" : undefined,
+                          touchAction: canViewAllStaff ? "none" : undefined,
                         }}
                       >
                         <p className="truncate font-medium">{service?.name ?? "Turno"}</p>
@@ -643,7 +772,7 @@ export function AdminCalendar() {
                     );
                   })}
 
-                  {drag && drag.staffId === member.id && (
+                  {drag && drag.colKey === col.key && (
                     <div
                       className="pointer-events-none absolute inset-x-0.5 z-30 rounded-lg border-2 border-dashed border-champagne bg-champagne/20"
                       style={{
@@ -675,7 +804,7 @@ export function AdminCalendar() {
             className="safe-bottom w-full max-w-sm rounded-t-3xl bg-white p-5 shadow-lg sm:rounded-2xl"
           >
             <h3 className="font-display text-lg text-charcoal">Nuevo turno</h3>
-            <p className="mt-1 text-sm capitalize text-charcoal/60">{formatDateLabel(date)}</p>
+            <p className="mt-1 text-sm capitalize text-charcoal/60">{formatDateLabel(createSlot.date)}</p>
 
             <label htmlFor="create-staff" className="mt-4 block text-xs text-charcoal/60">
               Profesional
@@ -693,6 +822,22 @@ export function AdminCalendar() {
                 </option>
               ))}
             </select>
+
+            {!canViewAllStaff && (
+              <>
+                <label htmlFor="create-date" className="mt-3 block text-xs text-charcoal/60">
+                  Día
+                </label>
+                <input
+                  id="create-date"
+                  type="date"
+                  required
+                  value={createSlot.date}
+                  onChange={(e) => setCreateSlot((f) => f && { ...f, date: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-charcoal/15 bg-white px-3 py-2 text-sm text-charcoal transition-colors hover:border-baby-pink focus:border-champagne"
+                />
+              </>
+            )}
 
             <label htmlFor="create-time" className="mt-3 block text-xs text-charcoal/60">
               Hora
@@ -761,7 +906,7 @@ export function AdminCalendar() {
       {editingBooking && (
         <BookingEditModal
           booking={editingBooking}
-          staffOptions={activeStaff}
+          staffOptions={visibleStaff}
           onClose={() => setEditingBooking(null)}
           onChanged={load}
         />

@@ -4,10 +4,11 @@ Dos nivels, mismo criterio que el resto de la suite:
   - Capa HTTP (`test_api.py`): se monkeypatchea `admin.invite_staff` para
     probar autorización (owner-only) y el shape de la respuesta, sin tocar
     sesión de DB real (`_DummySession`, ver `test_api.py`).
-  - Capa de servicio: se monkeypatchea `supabase_admin.invite_user` (nunca se
-    pega a la red) y se usa una sesión falsa en memoria (mismo patrón que
-    `FakeSession` de `test_bookings.py`) para probar que `invite_staff`
-    asigna el rol pedido y traduce errores del upstream correctamente.
+  - Capa de servicio: se monkeypatchea `supabase_admin.create_staff_user`
+    (nunca se pega a la red) y se usa una sesión falsa en memoria (mismo
+    patrón que `FakeSession` de `test_bookings.py`) para probar que
+    `invite_staff` asigna el rol pedido, devuelve la contraseña temporal y
+    traduce errores del upstream correctamente.
 """
 
 from __future__ import annotations
@@ -88,7 +89,7 @@ def test_owner_puede_invitar_staff(client, monkeypatch):
     async def fake_invite(session, salon_id, data):
         assert salon_id == owner.salon_id
         assert data.role == "staff"
-        return invited
+        return invited, "una-clave-temporal"
 
     monkeypatch.setattr(admin_service, "invite_staff", fake_invite)
 
@@ -97,7 +98,9 @@ def test_owner_puede_invitar_staff(client, monkeypatch):
         json={"email": "nueva@example.com", "full_name": "Nueva Staff", "role": "staff"},
     )
     assert res.status_code == 201
-    assert res.json()["role"] == "staff"
+    body = res.json()
+    assert body["role"] == "staff"
+    assert body["temporary_password"] == "una-clave-temporal"
 
 
 def test_staff_no_puede_invitar(client):
@@ -156,18 +159,19 @@ async def test_invite_staff_asigna_el_rol_pedido(monkeypatch):
         email="nueva@example.com",
     )
 
-    async def fake_invite_user(email, full_name, salon_id):
+    async def fake_create_staff_user(email, full_name, salon_id, password):
         return {"id": str(user_id)}
 
-    monkeypatch.setattr(supabase_admin, "invite_user", fake_invite_user)
+    monkeypatch.setattr(supabase_admin, "create_staff_user", fake_create_staff_user)
 
     session = _FakeSession(profile)
     data = StaffInviteCreate(email="nueva@example.com", full_name="Nueva Staff", role="owner")
 
-    result = await admin_service.invite_staff(session, SALON_ID, data)
+    result, temporary_password = await admin_service.invite_staff(session, SALON_ID, data)
 
     assert result.role == UserRole.owner
     assert session.commit_calls == 1
+    assert len(temporary_password) == 12
 
 
 @pytest.mark.asyncio
@@ -180,10 +184,10 @@ async def test_invite_staff_asigna_color_de_la_paleta_segun_orden(monkeypatch):
         id=user_id, salon_id=SALON_ID, role=UserRole.client, full_name="X", email="x@example.com"
     )
 
-    async def fake_invite_user(email, full_name, salon_id):
+    async def fake_create_staff_user(email, full_name, salon_id, password):
         return {"id": str(user_id)}
 
-    monkeypatch.setattr(supabase_admin, "invite_user", fake_invite_user)
+    monkeypatch.setattr(supabase_admin, "create_staff_user", fake_create_staff_user)
 
     class _CountingSession(_FakeSession):
         def __init__(self, profile, existing_count):
@@ -196,17 +200,17 @@ async def test_invite_staff_asigna_color_de_la_paleta_segun_orden(monkeypatch):
     session = _CountingSession(profile, existing_count=2)
     data = StaffInviteCreate(email="x@example.com", full_name="X", role="staff")
 
-    result = await admin_service.invite_staff(session, SALON_ID, data)
+    result, _temporary_password = await admin_service.invite_staff(session, SALON_ID, data)
 
     assert result.color == admin_service._STAFF_COLOR_PALETTE[2]
 
 
 @pytest.mark.asyncio
 async def test_invite_staff_propaga_conflicto_del_upstream(monkeypatch):
-    async def fake_invite_user(email, full_name, salon_id):
+    async def fake_create_staff_user(email, full_name, salon_id, password):
         raise ConflictError(f"Ya existe una cuenta con el email {email}")
 
-    monkeypatch.setattr(supabase_admin, "invite_user", fake_invite_user)
+    monkeypatch.setattr(supabase_admin, "create_staff_user", fake_create_staff_user)
 
     session = _FakeSession(None)
     data = StaffInviteCreate(email="repetida@example.com", full_name="X", role="staff")
@@ -220,10 +224,10 @@ async def test_invite_staff_error_si_el_profile_no_aparece(monkeypatch):
     """Defensivo: si el trigger de alta fallara en crear el profile (o lo
     creara en otro salón), no debe asignarse el rol a ciegas."""
 
-    async def fake_invite_user(email, full_name, salon_id):
+    async def fake_create_staff_user(email, full_name, salon_id, password):
         return {"id": str(uuid.uuid4())}
 
-    monkeypatch.setattr(supabase_admin, "invite_user", fake_invite_user)
+    monkeypatch.setattr(supabase_admin, "create_staff_user", fake_create_staff_user)
 
     session = _FakeSession(None)
     data = StaffInviteCreate(email="nueva@example.com", full_name="X", role="staff")

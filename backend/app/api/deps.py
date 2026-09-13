@@ -15,6 +15,7 @@ from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import NotAuthenticated, PermissionDenied
 from app.core.security import InvalidTokenError, decode_access_token
 from app.db.models import Profile, UserRole
@@ -94,3 +95,22 @@ def require_roles(*roles: UserRole):
         return profile
 
     return _checker
+
+
+def has_full_access(profile: Profile) -> bool:
+    """El owner, y las cuentas puntuales en `full_calendar_access_emails`,
+    tienen acceso total al salón (turnos, horarios, servicios) aunque su rol
+    sea staff. El resto del staff tiene acceso de solo lectura: puede ver la
+    agenda pero no crear/editar turnos, cambiar sus servicios ni su horario."""
+    if profile.role is UserRole.owner:
+        return True
+    email = (profile.email or "").strip().lower()
+    return email in get_settings().full_calendar_access_email_set()
+
+
+async def require_full_access(profile: Profile = Depends(get_current_profile)) -> Profile:
+    """Como `require_roles`, pero para acciones reservadas a un admin del
+    salón (ver `has_full_access`) en vez de a un rol fijo."""
+    if not has_full_access(profile):
+        raise PermissionDenied("Solo un admin del salón puede realizar esta acción")
+    return profile

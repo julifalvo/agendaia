@@ -122,8 +122,8 @@ class StaffServicesUpdate(BaseModel):
 
 
 class StaffInviteCreate(BaseModel):
-    """Alta de un owner/staff por invitación. Reemplaza el insert manual en
-    Supabase que documentaba `frontend/README.md`."""
+    """Alta de un owner/staff. Reemplaza el insert manual en Supabase que
+    documentaba `frontend/README.md`."""
 
     email: str = Field(min_length=3, max_length=320)
     full_name: str = Field(min_length=1, max_length=200)
@@ -134,6 +134,14 @@ class StaffInviteCreate(BaseModel):
         if "@" not in self.email or self.email.startswith("@") or self.email.endswith("@"):
             raise ValueError("email inválido")
         return self
+
+
+class StaffInviteOut(StaffOut):
+    """Igual que StaffOut, con la contraseña temporal que la dueña tiene que
+    pasarle al staff a mano. Solo viaja en la respuesta del alta — no se
+    guarda en ningún lado de este lado."""
+
+    temporary_password: str
 
 
 # --- Horarios laborales ------------------------------------------------------

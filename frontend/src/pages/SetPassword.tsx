@@ -13,6 +13,7 @@ export function SetPassword() {
   const { user, loading, signInWithPassword, updatePassword } = useAuth();
   const navigate = useNavigate();
   const requiresCurrentPassword = authRedirectType === null;
+  const mustChangePassword = user?.user_metadata?.must_change_password === true;
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [password, setPassword] = useState("");
@@ -80,15 +81,21 @@ export function SetPassword() {
         ) : (
           <>
             <h2 className="font-display text-center text-xl font-semibold text-charcoal">
-              {requiresCurrentPassword ? "Cambiar contraseña" : "Elegí tu contraseña"}
+              {requiresCurrentPassword && !mustChangePassword ? "Cambiar contraseña" : "Elegí tu contraseña"}
             </h2>
             <p className="mt-1 text-center text-xs text-charcoal/50">{user.email}</p>
+            {mustChangePassword && (
+              <p className="mt-2 rounded-xl bg-baby-pink/20 px-3 py-2 text-center text-xs text-charcoal/70">
+                Por seguridad, antes de entrar al panel tenés que cambiar la contraseña temporal
+                que te pasaron.
+              </p>
+            )}
 
             <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-3">
               {requiresCurrentPassword && (
                 <input
                   type="password"
-                  placeholder="Contraseña actual"
+                  placeholder={mustChangePassword ? "Contraseña temporal" : "Contraseña actual"}
                   required
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}

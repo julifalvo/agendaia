@@ -40,7 +40,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     },
     async updatePassword(password) {
-      const { error } = await supabase.auth.updateUser({ password });
+      // Limpiar `must_change_password` acá (y no solo en el alta) es lo que
+      // le devuelve a la staff el acceso normal al panel apenas elige su
+      // contraseña definitiva — ver el guard en AdminLayout.
+      const { error } = await supabase.auth.updateUser({
+        password,
+        data: { must_change_password: false },
+      });
       if (error) throw error;
     },
   };

@@ -283,6 +283,49 @@ def test_cliente_logueado_ignora_client_id_del_body(client, monkeypatch):
     assert captured["client_id"] != someone_else
 
 
+def test_staff_sin_acceso_completo_no_puede_cargar_turnos(client):
+    """La agenda de un staff sin acceso completo es de solo lectura: no puede
+    cargar un turno ni para un cliente ni para sí mismo."""
+    as_profile(make_profile(UserRole.staff, salon_id=SALON_ID))
+
+    res = client.post(
+        "/api/v1/bookings",
+        json={
+            "salon_id": str(SALON_ID),
+            "service_id": str(SERVICE_ID),
+            "start_time": START.isoformat(),
+        },
+    )
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
+
+
+def test_staff_con_acceso_completo_puede_cargar_turnos(client, monkeypatch):
+    """Un staff cuyo email figura en `full_calendar_access_emails` mantiene
+    el mismo alcance que el owner para cargar turnos."""
+    as_profile(
+        make_profile(
+            UserRole.staff, salon_id=SALON_ID, email="julianfalvo@gmail.com"
+        )
+    )
+
+    async def fake_create(session, request, now=None):
+        return make_appointment(guest_name="Cliente de admin")
+
+    monkeypatch.setattr(bookings_service, "create_booking", fake_create)
+
+    res = client.post(
+        "/api/v1/bookings",
+        json={
+            "salon_id": str(SALON_ID),
+            "service_id": str(SERVICE_ID),
+            "start_time": START.isoformat(),
+            "guest_name": "Cliente de admin",
+        },
+    )
+    assert res.status_code == 201
+
+
 # --- listado: aislamiento multi-tenant ----------------------------------------
 
 
@@ -323,6 +366,50 @@ def test_salon_id_nunca_viene_del_caller(client, monkeypatch):
     res = client.get("/api/v1/bookings")
     assert res.status_code == 200
     assert captured["salon_id"] == profile.salon_id
+
+
+def test_staff_sin_acceso_completo_solo_puede_listar_lo_propio(client, monkeypatch):
+    """Un staff común solo ve su propia agenda: `staff_id` pedido por query
+    string se ignora y se fuerza al propio, igual que ya pasaba con `client_id`
+    para un cliente."""
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+
+    captured = {}
+
+    async def fake_list(session, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(bookings_service, "list_bookings", fake_list)
+
+    otro_staff = uuid.uuid4()
+    res = client.get("/api/v1/bookings", params={"staff_id": str(otro_staff)})
+
+    assert res.status_code == 200
+    assert captured["staff_id"] == profile.id
+
+
+def test_staff_con_acceso_completo_puede_listar_todo_el_salon(client, monkeypatch):
+    """Los admins (email en `full_calendar_access_emails`) ven la agenda de
+    todo el salón aunque su rol sea staff, no owner."""
+    profile = make_profile(
+        UserRole.staff, salon_id=SALON_ID, email="marticarballo2711@gmail.com"
+    )
+    as_profile(profile)
+
+    captured = {}
+
+    async def fake_list(session, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(bookings_service, "list_bookings", fake_list)
+
+    res = client.get("/api/v1/bookings")
+
+    assert res.status_code == 200
+    assert captured["staff_id"] is None
 
 
 # --- autorización sobre un turno puntual --------------------------------------
@@ -375,9 +462,13 @@ def test_owner_puede_confirmar_turnos(client, monkeypatch):
 
 # --- autorización: un staff no puede tocar turnos de otro profesional --------
 #
-# `_authorize_mutation` (routes/bookings.py) restringe las 4 rutas que mutan
-# un turno existente: un staff (no owner) solo puede tocar lo suyo. El owner
-# sigue sin restricciones — se verifica con un caso de regresión.
+# `_authorize_access` (routes/bookings.py) ahora acota la lectura misma: un
+# staff sin acceso completo a la agenda (ver `_has_full_calendar_access`) ni
+# siquiera puede ver el turno de otro profesional, así que las 4 rutas que
+# mutan un turno existente devuelven 404 (no 403) ante uno ajeno — mismo
+# criterio que ya se aplicaba para no confirmarle a un atacante que el id
+# existe. El owner y los admins con acceso completo siguen sin restricciones
+# — se verifica con un caso de regresión.
 
 
 def test_staff_no_puede_cancelar_turno_de_otro_staff(client, monkeypatch):
@@ -391,8 +482,8 @@ def test_staff_no_puede_cancelar_turno_de_otro_staff(client, monkeypatch):
     monkeypatch.setattr(bookings_service, "get_booking", fake_get)
 
     res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
-    assert res.status_code == 403
-    assert res.json()["code"] == "permission_denied"
+    assert res.status_code == 404
+    assert res.json()["code"] == "not_found"
 
 
 def test_staff_no_puede_reprogramar_turno_de_otro_staff(client, monkeypatch):
@@ -409,8 +500,8 @@ def test_staff_no_puede_reprogramar_turno_de_otro_staff(client, monkeypatch):
         f"/api/v1/bookings/{appt.id}/reschedule",
         json={"start_time": START.isoformat()},
     )
-    assert res.status_code == 403
-    assert res.json()["code"] == "permission_denied"
+    assert res.status_code == 404
+    assert res.json()["code"] == "not_found"
 
 
 def test_staff_no_puede_cambiar_estado_de_turno_de_otro_staff(client, monkeypatch):
@@ -426,8 +517,8 @@ def test_staff_no_puede_cambiar_estado_de_turno_de_otro_staff(client, monkeypatc
     res = client.patch(
         f"/api/v1/bookings/{appt.id}/status", json={"status": "confirmed"}
     )
-    assert res.status_code == 403
-    assert res.json()["code"] == "permission_denied"
+    assert res.status_code == 404
+    assert res.json()["code"] == "not_found"
 
 
 def test_staff_no_puede_cambiar_pago_de_turno_de_otro_staff(client, monkeypatch):
@@ -443,13 +534,37 @@ def test_staff_no_puede_cambiar_pago_de_turno_de_otro_staff(client, monkeypatch)
     res = client.patch(
         f"/api/v1/bookings/{appt.id}/payment-status", json={"payment_status": "paid"}
     )
-    assert res.status_code == 403
-    assert res.json()["code"] == "permission_denied"
+    assert res.status_code == 404
+    assert res.json()["code"] == "not_found"
 
 
-def test_staff_puede_cancelar_su_propio_turno(client, monkeypatch):
-    """Regresión: la restricción nueva no debe bloquear a un staff sobre sus
-    propios turnos."""
+def test_staff_con_acceso_completo_puede_cancelar_turno_de_otro_staff(client, monkeypatch):
+    """Un staff cuyo email figura en `full_calendar_access_emails` (los admins
+    del salón) mantiene el mismo alcance que el owner: puede mutar turnos de
+    cualquier profesional, no solo los propios."""
+    profile = make_profile(
+        UserRole.staff, salon_id=SALON_ID, email="julianfalvo@gmail.com"
+    )
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=uuid.uuid4())
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    async def fake_cancel(session, appointment_id, reason=None):
+        return appt
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+    monkeypatch.setattr(bookings_service, "cancel_booking", fake_cancel)
+
+    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    assert res.status_code == 200
+
+
+def test_staff_no_puede_cancelar_ni_su_propio_turno(client, monkeypatch):
+    """La agenda de un staff sin acceso completo es de solo lectura: ni
+    siquiera puede cancelar/reprogramar sus propios turnos, eso queda
+    reservado a un admin del salón."""
     profile = make_profile(UserRole.staff, salon_id=SALON_ID)
     as_profile(profile)
     appt = make_appointment(salon_id=SALON_ID, staff_id=profile.id)
@@ -457,16 +572,11 @@ def test_staff_puede_cancelar_su_propio_turno(client, monkeypatch):
     async def fake_get(session, appointment_id):
         return appt
 
-    async def fake_cancel(session, appointment_id, reason=None):
-        return make_appointment(
-            salon_id=SALON_ID, staff_id=profile.id, status=AppointmentStatus.cancelled
-        )
-
     monkeypatch.setattr(bookings_service, "get_booking", fake_get)
-    monkeypatch.setattr(bookings_service, "cancel_booking", fake_cancel)
 
     res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
-    assert res.status_code == 200
+    assert res.status_code == 403
+    assert res.json()["code"] == "permission_denied"
 
 
 def test_owner_puede_cancelar_turno_de_cualquier_staff(client, monkeypatch):

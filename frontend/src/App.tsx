@@ -5,7 +5,7 @@ import { PublicSite } from "./pages/PublicSite";
 import { PrivacyPolicy } from "./pages/PrivacyPolicy";
 import { TermsOfService } from "./pages/TermsOfService";
 import { SetPassword } from "./pages/SetPassword";
-import { AdminLayout } from "./admin/AdminLayout";
+import { AdminLayout, RequireFullAccess } from "./admin/AdminLayout";
 import { AdminMyBookings } from "./admin/AdminMyBookings";
 import { AdminCalendar } from "./admin/AdminCalendar";
 import { AdminServices } from "./admin/AdminServices";
@@ -25,10 +25,12 @@ export default function App() {
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminMyBookings />} />
             <Route path="calendar" element={<AdminCalendar />} />
-            <Route path="services" element={<AdminServices />} />
-            <Route path="staff" element={<AdminStaff />} />
-            <Route path="staff/:staffId/schedule" element={<AdminSchedule />} />
-            <Route path="closures" element={<AdminClosures />} />
+            <Route element={<RequireFullAccess />}>
+              <Route path="services" element={<AdminServices />} />
+              <Route path="staff" element={<AdminStaff />} />
+              <Route path="staff/:staffId/schedule" element={<AdminSchedule />} />
+              <Route path="closures" element={<AdminClosures />} />
+            </Route>
           </Route>
         </Routes>
       </ProfileProvider>

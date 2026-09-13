@@ -6,7 +6,12 @@ import uuid
 from fastapi import APIRouter, Depends, Header, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_profile, get_optional_profile, require_roles
+from app.api.deps import (
+    get_current_profile,
+    get_optional_profile,
+    has_full_access,
+    require_roles,
+)
 from app.core.errors import PermissionDenied, ResourceNotFound
 from app.db.models import Appointment, AppointmentStatus, Profile, UserRole
 from app.db.session import get_session
@@ -29,14 +34,16 @@ _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
 
 def _authorize_access(profile: Profile, appointment: Appointment) -> None:
-    """Un cliente solo ve lo suyo; staff/owner ven lo de su salón.
+    """Un cliente solo ve lo suyo; owner/admins ven todo el salón; un staff
+    sin acceso completo (ver `has_full_access`) solo ve sus propios turnos.
 
     Se devuelve 404 en vez de 403 ante un turno ajeno para no confirmarle a
     un atacante que el id que probó existe.
     """
     if profile.role in _STAFF_ROLES:
         if appointment.salon_id == profile.salon_id:
-            return
+            if has_full_access(profile) or appointment.staff_id == profile.id:
+                return
     elif appointment.client_id == profile.id:
         return
 
@@ -44,20 +51,17 @@ def _authorize_access(profile: Profile, appointment: Appointment) -> None:
 
 
 def _authorize_mutation(profile: Profile, appointment: Appointment) -> None:
-    """Como `_authorize_access`, pero además exige que un staff (no owner) sea
-    el profesional asignado para poder modificar el turno.
+    """Como `_authorize_access`, pero además exige acceso completo (ver
+    `has_full_access`) para poder modificar el turno.
 
-    El owner tiene el mismo alcance que antes (todo el salón); un staff ahora
-    solo puede cancelar/reprogramar/cambiar estado o seña de sus propios
-    turnos, no los de otro profesional. Se usa solo en las rutas que mutan un
-    turno existente — la lectura (`get_booking`, `list_bookings`) sigue
-    salón-completo para staff, porque la agenda compartida necesita que vean
-    todas las columnas.
+    Un staff sin ese acceso tiene la agenda en modo solo lectura: puede ver
+    sus propios turnos pero no cancelarlos, reprogramarlos ni cambiar su
+    estado o seña — eso queda reservado al owner y a los admins del salón.
     """
     _authorize_access(profile, appointment)
-    if profile.role is UserRole.staff and appointment.staff_id != profile.id:
+    if profile.role is UserRole.staff and not has_full_access(profile):
         raise PermissionDenied(
-            "Solo el profesional asignado o el dueño del salón pueden modificar este turno"
+            "Solo un admin del salón puede modificar turnos"
         )
 
 
@@ -111,7 +115,9 @@ async def create_booking(
       token, ignorando lo que venga en el body. Solo puede reservar en el
       salón al que pertenece su perfil.
     - **Staff/owner**: puede cargar un turno para un cliente registrado o un
-      invitado, solo dentro de su propio salón.
+      invitado, solo dentro de su propio salón — y solo si tiene acceso
+      completo (ver `has_full_access`): un staff sin ese acceso tiene la
+      agenda en modo solo lectura, no puede cargar turnos ni para sí mismo.
 
     Devuelve 409 si el horario fue tomado (incluso por una carrera de
     milisegundos), 422 si el horario es inválido para las reglas del salón.
@@ -156,6 +162,8 @@ async def create_booking(
     else:  # owner / staff cargando el turno
         if payload.salon_id != profile.salon_id:
             raise PermissionDenied("No podés cargar turnos para otro salón")
+        if profile.role is UserRole.staff and not has_full_access(profile):
+            raise PermissionDenied("Solo un admin del salón puede cargar turnos")
         client_id, guest_name, guest_phone, guest_email, created_by = (
             payload.client_id,
             payload.guest_name,
@@ -200,16 +208,23 @@ async def list_bookings(
     Un cliente jamás puede pedir los turnos de otro: `client_id` se ignora y
     se fuerza a su propio id. `salon_id` nunca viene del caller: siempre es
     el del perfil autenticado, así que no hay forma de leer otro salón
-    cambiando un parámetro.
+    cambiando un parámetro. Del mismo modo, un staff sin acceso completo a la
+    agenda (ver `has_full_access`) solo puede pedir sus propios turnos:
+    `staff_id` se ignora y se fuerza a su propio id.
     """
     effective_client_id = profile.id if profile.role is UserRole.client else client_id
+    effective_staff_id = (
+        staff_id
+        if profile.role is not UserRole.staff or has_full_access(profile)
+        else profile.id
+    )
 
     rows = await bookings.list_bookings(
         session,
         salon_id=profile.salon_id,
         date_from=date_from,
         date_to=date_to,
-        staff_id=staff_id,
+        staff_id=effective_staff_id,
         client_id=effective_client_id,
         statuses=status_in,
         limit=limit,

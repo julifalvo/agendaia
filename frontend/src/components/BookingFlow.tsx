@@ -37,6 +37,11 @@ const fullDateFormatter = new Intl.DateTimeFormat("es-AR", {
   day: "numeric",
   month: "long",
 });
+const shortDateFormatter = new Intl.DateTimeFormat("es-AR", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+});
 
 /** Fecha local en formato YYYY-MM-DD. `toISOString()` convierte a UTC
  * primero, así que cerca de medianoche en Argentina (UTC-3) devolvería el
@@ -157,6 +162,56 @@ function BackLink({ onClick, children }: { onClick: () => void; children: ReactN
       </svg>
       {children}
     </button>
+  );
+}
+
+/** Fila compacta para un paso ya completado (servicio u horario elegidos):
+ * reemplaza la grilla/calendario completo por un resumen de una línea, así
+ * no hay que scrollear todo eso de nuevo para llegar al paso siguiente. Tocar
+ * la fila la "maximiza" de vuelta a la vista completa, sin borrar lo elegido
+ * — para eso siguen estando los links "Cambiar servicio/horario" de siempre. */
+function CollapsedStepRow({
+  label,
+  value,
+  onExpand,
+}: {
+  label: string;
+  value: string;
+  onExpand: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      layout
+      whileTap={{ scale: 0.985 }}
+      onClick={() => {
+        haptic(6);
+        onExpand();
+      }}
+      className="tap-btn flex w-full items-center justify-between gap-3 rounded-[1.6rem] border border-bubblegum/25 bg-bubblegum/[0.04] px-3.5 py-3.5 text-left"
+      aria-expanded={false}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-bubblegum/30 to-champagne/30 text-champagne">
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
+            <path
+              d="M5 13l4 4L19 7"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-charcoal/35">{label}</p>
+          <p className="truncate font-display text-[1.05rem] text-charcoal">{value}</p>
+        </div>
+      </div>
+      <span className="shrink-0 rounded-full border border-charcoal/15 px-3 py-1.5 text-xs font-medium text-charcoal/60 transition-colors hover:border-charcoal/30">
+        Cambiar
+      </span>
+    </motion.button>
   );
 }
 
@@ -438,6 +493,11 @@ export function BookingFlow() {
   // de ver horarios.
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  // Una vez elegido el servicio/horario, el paso se minimiza a un resumen de
+  // una línea para no tener que scrollear todo de nuevo hasta el paso
+  // siguiente. "Maximizar" (tocar la fila resumen) los vuelve a expandir.
+  const [serviceExpanded, setServiceExpanded] = useState(true);
+  const [slotExpanded, setSlotExpanded] = useState(true);
 
   function toggleCategory(key: string) {
     haptic(6);
@@ -757,6 +817,14 @@ export function BookingFlow() {
   }
 
   const step = currentStepIndex(!!selectedService, !!selectedSlot);
+  const serviceCollapsed = !!selectedService && !serviceExpanded;
+  const slotCollapsed = !!selectedSlot && !slotExpanded;
+  const selectedStaffName = staffForService.find((s) => s.id === selectedStaffId)?.full_name;
+  const slotSummary = selectedSlot
+    ? `${capitalize(shortDateFormatter.format(new Date(selectedSlot.start)))} · ${timeFormatter.format(
+        new Date(selectedSlot.start),
+      )}${selectedStaffName ? ` · ${selectedStaffName}` : ""}`
+    : "";
 
   return (
     <div>
@@ -764,6 +832,14 @@ export function BookingFlow() {
 
       {/* Paso 1: servicio */}
       <section>
+        {serviceCollapsed && selectedService ? (
+          <CollapsedStepRow
+            label={STEPS[0].label}
+            value={`${selectedService.name} · ${formatServicePrice(selectedService)}`}
+            onExpand={() => setServiceExpanded(true)}
+          />
+        ) : (
+          <>
         <SectionHeading>{STEPS[0].heading}</SectionHeading>
         {servicesError && (
           <div className="mt-2 flex items-center gap-2">
@@ -812,7 +888,10 @@ export function BookingFlow() {
                         key={service.id}
                         service={service}
                         isSelected={service.id === selectedServiceId}
-                        onSelect={() => setSelectedServiceId(service.id)}
+                        onSelect={() => {
+                          setSelectedServiceId(service.id);
+                          setServiceExpanded(false);
+                        }}
                       />
                     ))}
                   </div>
@@ -893,7 +972,10 @@ export function BookingFlow() {
                               key={service.id}
                               service={service}
                               isSelected={service.id === selectedServiceId}
-                              onSelect={() => setSelectedServiceId(service.id)}
+                              onSelect={() => {
+                          setSelectedServiceId(service.id);
+                          setServiceExpanded(false);
+                        }}
                               nested
                             />
                           ))}
@@ -905,6 +987,8 @@ export function BookingFlow() {
               );
             })}
         </div>
+          </>
+        )}
       </section>
 
       {/* Paso 2: fecha y horario */}
@@ -917,6 +1001,14 @@ export function BookingFlow() {
             transition={{ duration: 0.3 }}
             className="mt-8 border-t border-charcoal/8 pt-7"
           >
+            {slotCollapsed ? (
+              <CollapsedStepRow
+                label={STEPS[1].label}
+                value={slotSummary}
+                onExpand={() => setSlotExpanded(true)}
+              />
+            ) : (
+              <>
             <BackLink
               onClick={() => {
                 setSelectedServiceId(null);
@@ -1116,6 +1208,7 @@ export function BookingFlow() {
                             onClick={() => {
                               haptic();
                               setSelectedSlot(slot);
+                              setSlotExpanded(false);
                             }}
                             className="relative rounded-xl text-sm"
                           >
@@ -1142,6 +1235,8 @@ export function BookingFlow() {
                   </div>
                 ))}
             </div>
+              </>
+            )}
               </>
             )}
           </motion.section>

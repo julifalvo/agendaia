@@ -6,17 +6,25 @@ import { AdminCalendar } from "./AdminCalendar";
 
 /**
  * Cubre solo lo que tiene implicancia de seguridad/UX (mismo criterio que el
- * resto de `admin/`, que tiene baja densidad de tests): un staff no puede
- * abrir el modal de crear/editar turno en una columna que no es la suya, ni
- * arrastrar un turno hacia la columna de otro profesional. La restricción
- * real la impone el backend (`_authorize_mutation`); esto prueba que la UI
- * respeta el mismo límite en vez de ofrecer una acción que el backend va a
- * rechazar.
+ * resto de `admin/`, que tiene baja densidad de tests): un admin (owner, o
+ * los emails de `full_calendar_access_emails`) puede crear/reprogramar
+ * turnos de cualquier profesional; un staff sin ese acceso ve su propia
+ * semana en modo estrictamente solo lectura — ni crear, ni arrastrar, ni
+ * abrir el modal de edición sobre su propio turno. La restricción real la
+ * impone el backend (`_authorize_mutation`/`has_full_access`); esto prueba
+ * que la UI respeta el mismo límite en vez de ofrecer una acción que el
+ * backend va a rechazar.
  *
  * El reprogramado por arrastre usa Pointer Events (no HTML5 drag-and-drop,
  * que no dispara en touch) — jsdom no hace layout real, así que
  * `document.elementFromPoint` (con el que el componente detecta sobre qué
  * columna está el dedo/mouse) se mockea para devolver la columna elegida.
+ *
+ * Las fechas de los turnos de prueba se calculan relativas a "hoy" (no
+ * fechas fijas): `bookingsFor`/`isWorking` en el componente filtran por
+ * fecha exacta de columna, así que un turno con fecha fija quedaría fuera
+ * de la semana/día que el calendario efectivamente pide según cuándo corra
+ * el test.
  */
 
 const mockUseProfile = vi.fn();
@@ -52,6 +60,17 @@ function dragTo(button: HTMLElement, targetColumn: HTMLElement, clientY = 100) {
   } finally {
     document.elementFromPoint = originalElementFromPoint;
   }
+}
+
+/** ISO datetime `daysFromToday` días desde hoy a la hora local dada —
+ * construido a partir de un `Date` real y serializado con `toISOString()`,
+ * igual que una respuesta real del backend (mismo criterio de parseo que
+ * `toLocalDateInput`/`localMinutesSinceMidnight` en el componente). */
+function isoAt(daysFromToday: number, hour: number, minute = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysFromToday);
+  d.setHours(hour, minute, 0, 0);
+  return d.toISOString();
 }
 
 const STAFF_1 = {
@@ -96,8 +115,8 @@ const BOOKING = {
   guest_email: null,
   staff_id: "staff-1",
   service_id: "svc-1",
-  start_time: "2026-09-01T13:00:00.000Z",
-  end_time: "2026-09-01T14:00:00.000Z",
+  start_time: isoAt(0, 13),
+  end_time: isoAt(0, 14),
   duration_minutes: 60,
   price: "1000",
   currency: "ARS",
@@ -114,11 +133,11 @@ function workingBlock(dateFrom: string) {
   return [{ id: "sb-1", date: dateFrom, start_time: "08:00:00", end_time: "18:00:00" }];
 }
 
-function setupApiGet() {
+function setupApiGet(bookings: unknown[] = [BOOKING]) {
   apiGetMock.mockImplementation(async (path: string) => {
     if (path === "/staff") return [STAFF_1, STAFF_2];
     if (path === "/services/mine") return [SERVICE];
-    if (path.startsWith("/bookings?")) return [BOOKING];
+    if (path.startsWith("/bookings?")) return bookings;
     if (path.startsWith("/salon/closures")) return [];
     if (path.startsWith("/admin/google-calendar/blocks")) return [];
     if (path.startsWith("/admin/google-calendar/status")) {
@@ -138,6 +157,32 @@ function renderCalendar() {
   );
 }
 
+function ownerProfile() {
+  return {
+    id: "owner-1",
+    salon_id: "s1",
+    full_name: "Camila",
+    role: "owner",
+    is_active: true,
+    color: null,
+    email: null,
+    phone: null,
+  };
+}
+
+function staffProfile() {
+  return {
+    id: "staff-2",
+    salon_id: "s1",
+    full_name: "Beatriz",
+    role: "staff",
+    is_active: true,
+    color: "#0000ff",
+    email: null,
+    phone: null,
+  };
+}
+
 describe("AdminCalendar", () => {
   beforeEach(() => {
     apiGetMock.mockReset();
@@ -145,77 +190,8 @@ describe("AdminCalendar", () => {
     setupApiGet();
   });
 
-  it("un staff no puede abrir el modal de crear turno en una columna ajena, sí en la propia", async () => {
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "staff-2",
-        salon_id: "s1",
-        full_name: "Beatriz",
-        role: "staff",
-        is_active: true,
-        color: "#0000ff",
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
-
-    renderCalendar();
-
-    await waitFor(() =>
-      expect(screen.getAllByLabelText("Crear turno 09:00")).toHaveLength(2),
-    );
-    const [staffOneSlot, staffTwoSlot] = screen.getAllByLabelText("Crear turno 09:00");
-
-    expect(staffOneSlot).toBeDisabled(); // columna de staff-1: no es la propia
-    expect(staffTwoSlot).not.toBeDisabled(); // columna propia (staff-2)
-
-    const user = userEvent.setup();
-    await user.click(staffTwoSlot);
-    expect(screen.getByText("Nuevo turno")).toBeInTheDocument();
-  });
-
-  it("clickear el turno de otro profesional no abre el modal de edición", async () => {
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "staff-2",
-        salon_id: "s1",
-        full_name: "Beatriz",
-        role: "staff",
-        is_active: true,
-        color: "#0000ff",
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
-
-    renderCalendar();
-
-    const bookingButton = await screen.findByRole("button", { name: /Manicura/ });
-    const user = userEvent.setup();
-    await user.click(bookingButton);
-
-    expect(screen.queryByText("Reprogramar")).not.toBeInTheDocument();
-  });
-
-  it("el owner puede abrir el modal de crear en cualquier columna", async () => {
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "owner-1",
-        salon_id: "s1",
-        full_name: "Camila",
-        role: "owner",
-        is_active: true,
-        color: null,
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
+  it("un admin puede crear turnos en cualquier columna del día", async () => {
+    mockUseProfile.mockReturnValue({ profile: ownerProfile(), loading: false, refresh: vi.fn() });
 
     renderCalendar();
 
@@ -225,23 +201,14 @@ describe("AdminCalendar", () => {
     const slots = screen.getAllByLabelText("Crear turno 09:00");
     expect(slots[0]).not.toBeDisabled();
     expect(slots[1]).not.toBeDisabled();
+
+    const user = userEvent.setup();
+    await user.click(slots[0]);
+    expect(screen.getByText("Nuevo turno")).toBeInTheDocument();
   });
 
   it('el botón global "+ Nuevo turno" abre el modal de creación sin depender de un click en la grilla', async () => {
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "owner-1",
-        salon_id: "s1",
-        full_name: "Camila",
-        role: "owner",
-        is_active: true,
-        color: null,
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
+    mockUseProfile.mockReturnValue({ profile: ownerProfile(), loading: false, refresh: vi.fn() });
 
     renderCalendar();
     await waitFor(() => expect(screen.getAllByLabelText("Crear turno 09:00")).toHaveLength(2));
@@ -254,88 +221,85 @@ describe("AdminCalendar", () => {
     expect(screen.getByLabelText("Hora")).toBeInTheDocument();
   });
 
-  it("un staff no puede arrastrar un turno propio hacia la columna de otro profesional", async () => {
-    const OWN_BOOKING = { ...BOOKING, id: "b2", staff_id: "staff-2", guest_name: "Camila" };
-    apiGetMock.mockImplementation(async (path: string) => {
-      if (path === "/staff") return [STAFF_1, STAFF_2];
-      if (path === "/services/mine") return [SERVICE];
-      if (path.startsWith("/bookings?")) return [BOOKING, OWN_BOOKING];
-      if (path.startsWith("/salon/closures")) return [];
-      if (path.startsWith("/admin/google-calendar/blocks")) return [];
-      const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)/.exec(path);
-      if (scheduleMatch) return workingBlock(scheduleMatch[1]);
-      throw new Error(`apiGet no mockeado para: ${path}`);
-    });
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "staff-2",
-        salon_id: "s1",
-        full_name: "Beatriz",
-        role: "staff",
-        is_active: true,
-        color: "#0000ff",
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
+  it("un admin puede arrastrar el turno de una profesional a otra", async () => {
+    apiPostMock.mockResolvedValue(BOOKING);
+    mockUseProfile.mockReturnValue({ profile: ownerProfile(), loading: false, refresh: vi.fn() });
 
     renderCalendar();
 
-    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
-    const otherColumnSlot = screen.getAllByLabelText("Crear turno 09:00")[0]; // columna de staff-1
-    const otherColumn = otherColumnSlot.parentElement!;
+    const bookingButton = await screen.findByRole("button", { name: /Manicura/ });
+    const targetSlot = screen.getAllByLabelText("Crear turno 09:00")[1]; // columna de staff-2
+    const targetColumn = targetSlot.parentElement!;
 
-    dragTo(ownBookingButton, otherColumn);
-
-    expect(apiPostMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("/reschedule"),
-      expect.anything(),
-    );
-  });
-
-  it("un staff puede arrastrar un turno propio a otro horario dentro de su misma columna", async () => {
-    const OWN_BOOKING = { ...BOOKING, id: "b2", staff_id: "staff-2", guest_name: "Camila" };
-    apiGetMock.mockImplementation(async (path: string) => {
-      if (path === "/staff") return [STAFF_1, STAFF_2];
-      if (path === "/services/mine") return [SERVICE];
-      if (path.startsWith("/bookings?")) return [OWN_BOOKING];
-      if (path.startsWith("/salon/closures")) return [];
-      if (path.startsWith("/admin/google-calendar/blocks")) return [];
-      const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)/.exec(path);
-      if (scheduleMatch) return workingBlock(scheduleMatch[1]);
-      throw new Error(`apiGet no mockeado para: ${path}`);
-    });
-    apiPostMock.mockResolvedValue(OWN_BOOKING);
-    mockUseProfile.mockReturnValue({
-      profile: {
-        id: "staff-2",
-        salon_id: "s1",
-        full_name: "Beatriz",
-        role: "staff",
-        is_active: true,
-        color: "#0000ff",
-        email: null,
-        phone: null,
-      },
-      loading: false,
-      refresh: vi.fn(),
-    });
-
-    renderCalendar();
-
-    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
-    const ownColumnSlot = screen.getAllByLabelText("Crear turno 09:00")[1]; // columna de staff-2
-    const ownColumn = ownColumnSlot.parentElement!;
-
-    dragTo(ownBookingButton, ownColumn, 300); // suficientemente lejos del horario original
+    dragTo(bookingButton, targetColumn, 300);
 
     await waitFor(() =>
       expect(apiPostMock).toHaveBeenCalledWith(
         expect.stringContaining("/reschedule"),
         expect.objectContaining({ staff_id: "staff-2" }),
       ),
+    );
+  });
+
+  it("un staff sin acceso completo ve su semana (7 días) totalmente deshabilitada y sin botón de crear", async () => {
+    mockUseProfile.mockReturnValue({ profile: staffProfile(), loading: false, refresh: vi.fn() });
+
+    renderCalendar();
+
+    await waitFor(() =>
+      expect(screen.getAllByLabelText("Crear turno 09:00")).toHaveLength(7),
+    );
+    for (const slot of screen.getAllByLabelText("Crear turno 09:00")) {
+      expect(slot).toBeDisabled();
+    }
+    expect(screen.queryByRole("button", { name: "+ Nuevo turno" })).not.toBeInTheDocument();
+  });
+
+  it("clickear el turno propio de un staff no abre ningún modal (solo lectura)", async () => {
+    const OWN_BOOKING = {
+      ...BOOKING,
+      id: "b2",
+      staff_id: "staff-2",
+      guest_name: "Camila",
+      start_time: isoAt(0, 13),
+      end_time: isoAt(0, 14),
+    };
+    setupApiGet([OWN_BOOKING]);
+    mockUseProfile.mockReturnValue({ profile: staffProfile(), loading: false, refresh: vi.fn() });
+
+    renderCalendar();
+
+    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
+    const user = userEvent.setup();
+    await user.click(ownBookingButton);
+
+    expect(screen.queryByText("Reprogramar")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nuevo turno")).not.toBeInTheDocument();
+  });
+
+  it("un staff no puede arrastrar su propio turno a otro día (solo lectura)", async () => {
+    const OWN_BOOKING = {
+      ...BOOKING,
+      id: "b2",
+      staff_id: "staff-2",
+      guest_name: "Camila",
+      start_time: isoAt(0, 13),
+      end_time: isoAt(0, 14),
+    };
+    setupApiGet([OWN_BOOKING]);
+    mockUseProfile.mockReturnValue({ profile: staffProfile(), loading: false, refresh: vi.fn() });
+
+    renderCalendar();
+
+    const ownBookingButton = await screen.findByRole("button", { name: /Camila/ });
+    const otherDaySlot = screen.getAllByLabelText("Crear turno 09:00")[1]; // otro día de la semana
+    const otherDayColumn = otherDaySlot.parentElement!;
+
+    dragTo(ownBookingButton, otherDayColumn, 300);
+
+    expect(apiPostMock).not.toHaveBeenCalledWith(
+      expect.stringContaining("/reschedule"),
+      expect.anything(),
     );
   });
 });

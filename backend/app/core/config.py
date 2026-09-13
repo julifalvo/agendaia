@@ -56,8 +56,23 @@ class Settings(BaseSettings):
     #: sección, aunque tengan rol owner.
     google_calendar_allowed_email: str = "marticarballo2711@gmail.com"
 
+    #: Emails con visibilidad total de la agenda del salón (ven los turnos de
+    #: todo el staff, no solo los propios), sin importar su rol. El resto de
+    #: los perfiles con rol staff solo ve su propia agenda. Separados por
+    #: coma.
+    full_calendar_access_emails: str = (
+        "marticarballo2711@gmail.com,julianfalvo@gmail.com"
+    )
+
     db_echo: bool = False
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    def full_calendar_access_email_set(self) -> frozenset[str]:
+        return frozenset(
+            email.strip().lower()
+            for email in self.full_calendar_access_emails.split(",")
+            if email.strip()
+        )
 
 
 @lru_cache

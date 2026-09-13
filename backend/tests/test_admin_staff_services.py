@@ -118,6 +118,38 @@ def test_client_no_puede_ver_los_servicios(client):
     assert res.status_code == 403
 
 
+def test_staff_sin_acceso_completo_no_puede_cambiar_sus_servicios(client):
+    """Agenda de solo lectura: un staff común no puede tocar ni sus propios
+    servicios, eso queda reservado a un admin del salón."""
+    staff = make_profile(UserRole.staff)
+    as_profile(staff)
+
+    res = client.put(
+        f"/api/v1/staff/{staff.id}/services", json={"service_ids": []}
+    )
+    assert res.status_code == 403
+
+
+def test_staff_con_acceso_completo_puede_cambiar_servicios(client, monkeypatch):
+    """Un staff cuyo email figura en `full_calendar_access_emails` mantiene
+    el mismo alcance que el owner."""
+    admin = make_profile(UserRole.staff, email="julianfalvo@gmail.com")
+    as_profile(admin)
+    staff_id = uuid.uuid4()
+    service_ids = [uuid.uuid4()]
+
+    async def fake_set(session, salon_id, sid, ids):
+        return ids
+
+    monkeypatch.setattr(admin_service, "set_staff_services", fake_set)
+
+    res = client.put(
+        f"/api/v1/staff/{staff_id}/services",
+        json={"service_ids": [str(i) for i in service_ids]},
+    )
+    assert res.status_code == 200
+
+
 # --- capa de servicio: no depende de que el servicio esté activo ----------
 
 
