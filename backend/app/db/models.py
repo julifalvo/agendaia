@@ -359,9 +359,12 @@ class GoogleCalendarBlock(Base):
     """Eventos creados directamente en el Google Calendar conectado (no por
     esta app), sincronizados on-demand y tratados como agenda ocupada por el
     motor de disponibilidad (ver app/services/availability.busy_intervals).
-    `staff_id` NULL bloquea todo el salón (como SalonClosure); con valor
-    bloquea solo a ese profesional — se infiere de un tag opcional "[Nombre]"
-    al inicio del título del evento en Google."""
+    `staff_id` bloquea solo a ese profesional — por default, quien conectó el
+    calendario (`GoogleCalendarConnection.connected_by`), salvo que el título
+    del evento en Google lleve un tag opcional "[Nombre]" que apunte a otra
+    profesional activa (ver `google_calendar._resolve_block_staff_id`). NULL
+    solo puede pasar en una conexión vieja sin `connected_by` registrado, y
+    ahí sí bloquea todo el salón (como SalonClosure) por prudencia."""
 
     __tablename__ = "google_calendar_blocks"
 

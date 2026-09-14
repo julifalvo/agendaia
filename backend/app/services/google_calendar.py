@@ -54,8 +54,11 @@ _SCOPE = "https://www.googleapis.com/auth/calendar"
 #: externo" un evento que en realidad empujamos nosotros.
 _APP_TAG_KEY = "agendaia_appointment_id"
 #: Tag opcional al inicio del título de un evento creado a mano en Google
-#: ("[Fulana] vacaciones") para indicar que bloquea solo a esa profesional en
-#: vez de a todo el salón. Best-effort, sin tag = bloquea todo el salón.
+#: ("[Fulana] vacaciones") para indicar que bloquea a una profesional
+#: puntual. Sin tag, el evento bloquea solo a quien conectó el calendario
+#: (ver `_resolve_block_staff_id`) — no a todo el salón: ese único Google
+#: Calendar conectado es personal de quien lo conectó (hoy, marticarballo),
+#: así que la mayoría de sus eventos no van a llevar tag nunca.
 _STAFF_TAG_RE = re.compile(r"^\[([^\]]+)\]")
 
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
@@ -327,6 +330,25 @@ def _infer_staff_id(summary: str, staff_by_name: dict[str, uuid.UUID]) -> uuid.U
     return staff_by_name.get(match.group(1).strip().lower())
 
 
+def _resolve_block_staff_id(
+    summary: str,
+    staff_by_name: dict[str, uuid.UUID],
+    connected_by: uuid.UUID | None,
+) -> uuid.UUID | None:
+    """A quién bloquea un evento sincronizado.
+
+    Con tag `[Nombre]` que matchea a una profesional activa, la bloquea solo
+    a ella. Sin tag (el caso común — un evento personal cualquiera en el
+    Google Calendar de quien lo conectó), bloquea solo a esa persona, no a
+    todo el salón: antes cualquier evento personal sin tag terminaba
+    ocupando la agenda de TODO el staff, que es el bug que esto arregla. Para
+    cerrar el salón entero de verdad sigue estando la función dedicada
+    (`SalonClosure`, "Bloquear agenda" en el panel) — `None` acá queda solo
+    como fallback defensivo para una conexión vieja sin `connected_by`.
+    """
+    return _infer_staff_id(summary, staff_by_name) or connected_by
+
+
 def _parse_event_datetime(value: dict) -> dt.datetime | None:
     """`dateTime` = evento con hora puntual (lo que nos interesa). `date`
     (evento de todo el día) se ignora a propósito — no over-engineering: es
@@ -411,7 +433,7 @@ async def sync_incoming_events(
         event_id = event["id"]
         seen_event_ids.add(event_id)
         summary = event.get("summary") or ""
-        staff_id = _infer_staff_id(summary, staff_by_name)
+        staff_id = _resolve_block_staff_id(summary, staff_by_name, connection.connected_by)
 
         existing = await session.scalar(
             select(GoogleCalendarBlock).where(

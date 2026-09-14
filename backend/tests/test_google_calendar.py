@@ -153,9 +153,42 @@ def test_infer_staff_id_con_tag_matcheado():
     )
 
 
-def test_infer_staff_id_sin_tag_bloquea_todo_el_salon():
+def test_infer_staff_id_sin_tag_no_matchea_nada():
     assert google_calendar._infer_staff_id("Feriado nacional", {"x": STAFF_ID}) is None
 
 
-def test_infer_staff_id_con_tag_sin_match_bloquea_todo_el_salon():
+def test_infer_staff_id_con_tag_sin_match_no_matchea_nada():
     assert google_calendar._infer_staff_id("[Alguien Que No Existe] evento", {}) is None
+
+
+# --- a quién bloquea un evento sincronizado -----------------------------------
+#
+# El bug real que esto cubre: la dueña conecta su Google Calendar personal,
+# y la mayoría de sus eventos (dentista, trámites) no llevan ningún tag "[Nombre]".
+# Antes, "sin tag" bloqueaba a TODO el staff; ahora bloquea solo a ella (quien
+# conectó el calendario), a menos que el evento lleve el tag de otra profesional.
+
+
+def test_resolve_block_staff_id_con_tag_matcheado_ignora_a_quien_conecto():
+    staff_by_name = {"valentina profesional": STAFF_ID}
+    connected_by = uuid.uuid4()
+    assert (
+        google_calendar._resolve_block_staff_id(
+            "[Valentina Profesional] vacaciones", staff_by_name, connected_by
+        )
+        == STAFF_ID
+    )
+
+
+def test_resolve_block_staff_id_sin_tag_bloquea_solo_a_quien_conecto():
+    connected_by = uuid.uuid4()
+    assert (
+        google_calendar._resolve_block_staff_id("Turno con el dentista", {}, connected_by)
+        == connected_by
+    )
+
+
+def test_resolve_block_staff_id_sin_connected_by_bloquea_todo_el_salon():
+    """Solo pasa con una conexión vieja sin `connected_by` registrado —
+    fallback defensivo, no el caso normal."""
+    assert google_calendar._resolve_block_staff_id("Feriado nacional", {}, None) is None

@@ -203,9 +203,11 @@ async def busy_intervals(
         busy[sid].extend(closures)
 
     # Bloqueos traídos de Google Calendar (sync on-demand, ver
-    # app/services/google_calendar.py): staff_id NULL bloquea a todos los
-    # profesionales por igual (como SalonClosure); con valor bloquea solo a
-    # ese profesional.
+    # app/services/google_calendar.py): normalmente bloquean solo a un
+    # profesional puntual (por default, quien conectó el calendario; con tag
+    # "[Nombre]" en el evento, esa otra profesional). staff_id NULL solo
+    # aparece en una conexión vieja sin connected_by, y ahí bloquea a todos
+    # por igual (como SalonClosure) por prudencia.
     google_block_stmt = select(GoogleCalendarBlock).where(
         GoogleCalendarBlock.salon_id == salon_id,
         GoogleCalendarBlock.starts_at < window.end,
