@@ -51,18 +51,12 @@ def _authorize_access(profile: Profile, appointment: Appointment) -> None:
 
 
 def _authorize_mutation(profile: Profile, appointment: Appointment) -> None:
-    """Como `_authorize_access`, pero además exige acceso completo (ver
-    `has_full_access`) para poder modificar el turno.
-
-    Un staff sin ese acceso tiene la agenda en modo solo lectura: puede ver
-    sus propios turnos pero no cancelarlos, reprogramarlos ni cambiar su
-    estado o seña — eso queda reservado al owner y a los admins del salón.
-    """
+    """Mutar un turno exige el mismo alcance que verlo: el propio turno (ver
+    `_authorize_access`), o acceso completo (ver `has_full_access`) para
+    cualquiera del salón. Ya no hay una restricción extra encima — un staff
+    sin acceso completo puede cancelar/reprogramar/cambiar el estado de sus
+    propios turnos desde el calendario, no los ajenos."""
     _authorize_access(profile, appointment)
-    if profile.role is UserRole.staff and not has_full_access(profile):
-        raise PermissionDenied(
-            "Solo un admin del salón puede modificar turnos"
-        )
 
 
 @router.get("/availability", response_model=AvailabilityOut)
@@ -115,9 +109,10 @@ async def create_booking(
       token, ignorando lo que venga en el body. Solo puede reservar en el
       salón al que pertenece su perfil.
     - **Staff/owner**: puede cargar un turno para un cliente registrado o un
-      invitado, solo dentro de su propio salón — y solo si tiene acceso
-      completo (ver `has_full_access`): un staff sin ese acceso tiene la
-      agenda en modo solo lectura, no puede cargar turnos ni para sí mismo.
+      invitado, solo dentro de su propio salón. Un staff sin acceso completo
+      (ver `has_full_access`) solo puede cargarlo para sí mismo: si no manda
+      `staff_id` se lo fuerza al propio, y si manda el de otro profesional se
+      rechaza — la agenda ajena le sigue quedando fuera de alcance.
 
     Devuelve 409 si el horario fue tomado (incluso por una carrera de
     milisegundos), 422 si el horario es inválido para las reglas del salón.
@@ -127,6 +122,8 @@ async def create_booking(
     para el botón "Confirmar reserva" del frontend, que puede reintentar
     solo ante un timeout de red.
     """
+    effective_staff_id = payload.staff_id
+
     if profile is None:
         if payload.client_id is not None:
             raise PermissionDenied(
@@ -163,7 +160,11 @@ async def create_booking(
         if payload.salon_id != profile.salon_id:
             raise PermissionDenied("No podés cargar turnos para otro salón")
         if profile.role is UserRole.staff and not has_full_access(profile):
-            raise PermissionDenied("Solo un admin del salón puede cargar turnos")
+            if payload.staff_id is not None and payload.staff_id != profile.id:
+                raise PermissionDenied(
+                    "Un staff sin acceso completo solo puede cargarse turnos a sí mismo"
+                )
+            effective_staff_id = profile.id
         client_id, guest_name, guest_phone, guest_email, created_by = (
             payload.client_id,
             payload.guest_name,
@@ -178,7 +179,7 @@ async def create_booking(
             salon_id=payload.salon_id,
             service_id=payload.service_id,
             start_time=payload.start_time,
-            staff_id=payload.staff_id,
+            staff_id=effective_staff_id,
             client_id=client_id,
             guest_name=guest_name,
             guest_phone=guest_phone,
@@ -302,6 +303,18 @@ async def reschedule_booking(
 ) -> BookingOut:
     appointment = await bookings.get_booking(session, appointment_id)
     _authorize_mutation(profile, appointment)
+    if (
+        profile.role is UserRole.staff
+        and not has_full_access(profile)
+        and payload.staff_id is not None
+        and payload.staff_id != profile.id
+    ):
+        # Puede mover su propio turno de horario, pero no pasárselo a otra
+        # profesional: eso es una decisión de asignación que queda para un
+        # admin del salón.
+        raise PermissionDenied(
+            "Un staff sin acceso completo no puede reasignar un turno a otro profesional"
+        )
     updated = await bookings.reschedule_booking(
         session,
         appointment_id,

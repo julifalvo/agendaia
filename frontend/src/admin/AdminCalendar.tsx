@@ -148,12 +148,21 @@ export function AdminCalendar() {
     () => (canViewAllStaff ? activeStaff : activeStaff.filter((s) => s.id === profile?.id)),
     [activeStaff, canViewAllStaff, profile?.id],
   );
-  // Solo un admin (ver `canViewAllStaff`) puede cargar turnos; el resto del
-  // staff tiene la agenda en modo solo lectura.
+  // Un admin (ver `canViewAllStaff`) puede cargar/editar turnos de
+  // cualquiera; el resto del staff solo los propios — mismo alcance que ya
+  // impone el backend en `_authorize_mutation`/`create_booking`.
   const manageableStaff = useMemo(
-    () => (canViewAllStaff ? activeStaff : []),
-    [activeStaff, canViewAllStaff],
+    () => (canViewAllStaff ? activeStaff : activeStaff.filter((s) => s.id === profile?.id)),
+    [activeStaff, canViewAllStaff, profile?.id],
   );
+
+  function canManageColumn(col: CalendarColumn): boolean {
+    return canViewAllStaff || col.staffId === profile?.id;
+  }
+
+  function canManageBooking(booking: ApiBooking): boolean {
+    return canViewAllStaff || booking.staff_id === profile?.id;
+  }
 
   // Un staff sin acceso completo ve su semana (columnas = días); los admins
   // ven un día con columnas = profesionales.
@@ -316,7 +325,7 @@ export function AdminCalendar() {
 
   function openCreate(colKey: string, slotIndex: number) {
     const col = columns.find((c) => c.key === colKey);
-    if (!col || !canViewAllStaff) return;
+    if (!col || !canManageColumn(col)) return;
     const minutes = DAY_START_MIN + slotIndex * SLOT_MIN;
     setCreateSlot({
       staffId: col.staffId,
@@ -371,7 +380,7 @@ export function AdminCalendar() {
   }
 
   function openEdit(booking: ApiBooking) {
-    if (!canViewAllStaff) return;
+    if (!canManageBooking(booking)) return;
     setEditingBooking(booking);
   }
 
@@ -381,7 +390,7 @@ export function AdminCalendar() {
 
   async function commitReschedule(booking: ApiBooking, colKey: string, slotIndex: number) {
     const col = columns.find((c) => c.key === colKey);
-    if (!col || !canViewAllStaff) return;
+    if (!col || !canManageBooking(booking) || !canManageColumn(col)) return;
     if (slotIndex < 0 || slotIndex >= SLOT_COUNT || !isWorking(col, slotIndex)) return;
     const snapped = DAY_START_MIN + slotIndex * SLOT_MIN;
     const unchanged =
@@ -404,7 +413,7 @@ export function AdminCalendar() {
   }
 
   function handleBookingPointerDown(event: PointerEvent<HTMLButtonElement>, booking: ApiBooking) {
-    if (!canViewAllStaff) return;
+    if (!canManageBooking(booking)) return;
     // Progressive enhancement: si el navegador no soporta pointer capture,
     // el drag sigue funcionando vía elementFromPoint, solo es menos robusto
     // si el dedo sale de los límites del botón.
@@ -530,10 +539,9 @@ export function AdminCalendar() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-2xl text-charcoal">Calendario</h2>
         <div className="flex flex-wrap items-center gap-2">
-          {canViewAllStaff && (
+          {manageableStaff.length > 0 && (
             <button
               type="button"
-              disabled={manageableStaff.length === 0}
               onClick={openCreateGlobal}
               className="tap-btn rounded-full bg-gradient-to-r from-bubblegum to-champagne px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
@@ -697,7 +705,7 @@ export function AdminCalendar() {
 
                   {Array.from({ length: SLOT_COUNT }).map((_, slotIndex) => {
                     const working = isWorking(col, slotIndex);
-                    const interactive = working && canViewAllStaff;
+                    const interactive = working && canManageColumn(col);
                     return (
                       <button
                         key={slotIndex}
@@ -740,6 +748,7 @@ export function AdminCalendar() {
                     const top = (localMinutesSinceMidnight(booking.start_time) - DAY_START_MIN) * PX_PER_MIN;
                     const height = Math.max(booking.duration_minutes * PX_PER_MIN, 18);
                     const isBeingDragged = drag?.booking.id === booking.id;
+                    const manageable = canManageBooking(booking);
                     return (
                       <button
                         key={booking.id}
@@ -756,14 +765,14 @@ export function AdminCalendar() {
                           openEdit(booking);
                         }}
                         className={`absolute inset-x-0.5 z-20 overflow-hidden rounded-lg px-1.5 py-0.5 text-left text-[11px] text-white shadow-sm transition-[filter,box-shadow] duration-150 hover:z-30 hover:shadow-lg hover:brightness-110 active:brightness-90 ${
-                          canViewAllStaff ? "cursor-grab active:cursor-grabbing" : "cursor-default"
+                          manageable ? "cursor-grab active:cursor-grabbing" : "cursor-default"
                         }`}
                         style={{
                           top,
                           height,
                           backgroundColor: col.color ?? "#999999",
                           opacity: isBeingDragged ? 0.35 : booking.status === "no_show" ? 0.5 : 1,
-                          touchAction: canViewAllStaff ? "none" : undefined,
+                          touchAction: manageable ? "none" : undefined,
                         }}
                       >
                         <p className="truncate font-medium">{service?.name ?? "Turno"}</p>

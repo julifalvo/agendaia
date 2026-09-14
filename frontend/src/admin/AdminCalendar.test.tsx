@@ -8,12 +8,12 @@ import { AdminCalendar } from "./AdminCalendar";
  * Cubre solo lo que tiene implicancia de seguridad/UX (mismo criterio que el
  * resto de `admin/`, que tiene baja densidad de tests): un admin (owner, o
  * los emails de `full_calendar_access_emails`) puede crear/reprogramar
- * turnos de cualquier profesional; un staff sin ese acceso ve su propia
- * semana en modo estrictamente solo lectura — ni crear, ni arrastrar, ni
- * abrir el modal de edición sobre su propio turno. La restricción real la
- * impone el backend (`_authorize_mutation`/`has_full_access`); esto prueba
- * que la UI respeta el mismo límite en vez de ofrecer una acción que el
- * backend va a rechazar.
+ * turnos de cualquier profesional; un staff sin ese acceso puede hacer lo
+ * mismo pero solo con los propios — su semana solo tiene columnas de sí
+ * mismo, así que ahí puede crear, arrastrar y abrir el modal de edición
+ * igual que un admin. La restricción real la impone el backend
+ * (`_authorize_mutation`/`create_booking`/`has_full_access`); esto prueba
+ * que la UI ofrece las mismas acciones que el backend va a aceptar.
  *
  * El reprogramado por arrastre usa Pointer Events (no HTML5 drag-and-drop,
  * que no dispara en touch) — jsdom no hace layout real, así que
@@ -129,8 +129,20 @@ const BOOKING = {
   mp_init_point: null,
 };
 
-function workingBlock(dateFrom: string) {
-  return [{ id: "sb-1", date: dateFrom, start_time: "08:00:00", end_time: "18:00:00" }];
+/** Un bloque laboral 08:00–18:00 por cada día entre `dateFrom` y `dateTo`
+ * (inclusive) — la vista semanal de un staff sin acceso completo pide el
+ * horario de toda la semana de una sola vez (no día por día como la vista
+ * admin), así que el mock tiene que cubrir el rango completo. */
+function workingBlock(dateFrom: string, dateTo: string = dateFrom) {
+  const blocks: { id: string; date: string; start_time: string; end_time: string }[] = [];
+  const cursor = new Date(`${dateFrom}T00:00:00`);
+  const end = new Date(`${dateTo}T00:00:00`);
+  while (cursor <= end) {
+    const iso = cursor.toISOString().slice(0, 10);
+    blocks.push({ id: `sb-${iso}`, date: iso, start_time: "08:00:00", end_time: "18:00:00" });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return blocks;
 }
 
 function setupApiGet(bookings: unknown[] = [BOOKING]) {
@@ -143,8 +155,8 @@ function setupApiGet(bookings: unknown[] = [BOOKING]) {
     if (path.startsWith("/admin/google-calendar/status")) {
       return { connected: false, calendar_id: null, connected_at: null, last_synced_at: null };
     }
-    const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)/.exec(path);
-    if (scheduleMatch) return workingBlock(scheduleMatch[1]);
+    const scheduleMatch = /^\/staff\/[^/]+\/schedule\?date_from=([^&]+)&date_to=([^&]+)/.exec(path);
+    if (scheduleMatch) return workingBlock(scheduleMatch[1], scheduleMatch[2]);
     throw new Error(`apiGet no mockeado para: ${path}`);
   });
 }
@@ -241,7 +253,7 @@ describe("AdminCalendar", () => {
     );
   });
 
-  it("un staff sin acceso completo ve su semana (7 días) totalmente deshabilitada y sin botón de crear", async () => {
+  it("un staff sin acceso completo puede crear turnos en su propia semana", async () => {
     mockUseProfile.mockReturnValue({ profile: staffProfile(), loading: false, refresh: vi.fn() });
 
     renderCalendar();
@@ -250,12 +262,15 @@ describe("AdminCalendar", () => {
       expect(screen.getAllByLabelText("Crear turno 09:00")).toHaveLength(7),
     );
     for (const slot of screen.getAllByLabelText("Crear turno 09:00")) {
-      expect(slot).toBeDisabled();
+      expect(slot).not.toBeDisabled();
     }
-    expect(screen.queryByRole("button", { name: "+ Nuevo turno" })).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "+ Nuevo turno" }));
+    expect(screen.getByText("Nuevo turno")).toBeInTheDocument();
   });
 
-  it("clickear el turno propio de un staff no abre ningún modal (solo lectura)", async () => {
+  it("clickear el turno propio de un staff abre el modal de edición", async () => {
     const OWN_BOOKING = {
       ...BOOKING,
       id: "b2",
@@ -273,11 +288,10 @@ describe("AdminCalendar", () => {
     const user = userEvent.setup();
     await user.click(ownBookingButton);
 
-    expect(screen.queryByText("Reprogramar")).not.toBeInTheDocument();
-    expect(screen.queryByText("Nuevo turno")).not.toBeInTheDocument();
+    expect(screen.getByText("Reprogramar")).toBeInTheDocument();
   });
 
-  it("un staff no puede arrastrar su propio turno a otro día (solo lectura)", async () => {
+  it("un staff puede arrastrar su propio turno a otro día de su semana", async () => {
     const OWN_BOOKING = {
       ...BOOKING,
       id: "b2",
@@ -287,6 +301,7 @@ describe("AdminCalendar", () => {
       end_time: isoAt(0, 14),
     };
     setupApiGet([OWN_BOOKING]);
+    apiPostMock.mockResolvedValue(OWN_BOOKING);
     mockUseProfile.mockReturnValue({ profile: staffProfile(), loading: false, refresh: vi.fn() });
 
     renderCalendar();
@@ -297,9 +312,11 @@ describe("AdminCalendar", () => {
 
     dragTo(ownBookingButton, otherDayColumn, 300);
 
-    expect(apiPostMock).not.toHaveBeenCalledWith(
-      expect.stringContaining("/reschedule"),
-      expect.anything(),
+    await waitFor(() =>
+      expect(apiPostMock).toHaveBeenCalledWith(
+        expect.stringContaining("/reschedule"),
+        expect.objectContaining({ staff_id: "staff-2" }),
+      ),
     );
   });
 });

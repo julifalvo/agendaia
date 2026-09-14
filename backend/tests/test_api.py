@@ -283,10 +283,19 @@ def test_cliente_logueado_ignora_client_id_del_body(client, monkeypatch):
     assert captured["client_id"] != someone_else
 
 
-def test_staff_sin_acceso_completo_no_puede_cargar_turnos(client):
-    """La agenda de un staff sin acceso completo es de solo lectura: no puede
-    cargar un turno ni para un cliente ni para sí mismo."""
-    as_profile(make_profile(UserRole.staff, salon_id=SALON_ID))
+def test_staff_sin_acceso_completo_puede_cargar_turno_para_si_mismo(client, monkeypatch):
+    """Un staff sin acceso completo puede cargarse un turno a sí mismo desde
+    su propio calendario — no le hace falta acceso completo para eso."""
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+
+    captured = {}
+
+    async def fake_create(session, request, now=None):
+        captured["staff_id"] = request.staff_id
+        return make_appointment(guest_name="Cliente", staff_id=profile.id)
+
+    monkeypatch.setattr(bookings_service, "create_booking", fake_create)
 
     res = client.post(
         "/api/v1/bookings",
@@ -294,6 +303,27 @@ def test_staff_sin_acceso_completo_no_puede_cargar_turnos(client):
             "salon_id": str(SALON_ID),
             "service_id": str(SERVICE_ID),
             "start_time": START.isoformat(),
+            "guest_name": "Cliente",
+        },
+    )
+    assert res.status_code == 201
+    # Sin staff_id en el body, se fuerza al propio: no queda a criterio del
+    # resolver automático de disponibilidad, que podría asignarle a otra.
+    assert captured["staff_id"] == profile.id
+
+
+def test_staff_sin_acceso_completo_no_puede_cargar_turno_para_otro_staff(client):
+    as_profile(make_profile(UserRole.staff, salon_id=SALON_ID))
+    otro_staff = uuid.uuid4()
+
+    res = client.post(
+        "/api/v1/bookings",
+        json={
+            "salon_id": str(SALON_ID),
+            "service_id": str(SERVICE_ID),
+            "start_time": START.isoformat(),
+            "staff_id": str(otro_staff),
+            "guest_name": "Cliente",
         },
     )
     assert res.status_code == 403
@@ -561,10 +591,50 @@ def test_staff_con_acceso_completo_puede_cancelar_turno_de_otro_staff(client, mo
     assert res.status_code == 200
 
 
-def test_staff_no_puede_cancelar_ni_su_propio_turno(client, monkeypatch):
-    """La agenda de un staff sin acceso completo es de solo lectura: ni
-    siquiera puede cancelar/reprogramar sus propios turnos, eso queda
-    reservado a un admin del salón."""
+def test_staff_puede_cancelar_su_propio_turno(client, monkeypatch):
+    """Un staff sin acceso completo puede cancelar sus propios turnos desde
+    su calendario — la restricción es solo sobre los ajenos."""
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=profile.id)
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    async def fake_cancel(session, appointment_id, reason=None):
+        return make_appointment(salon_id=SALON_ID, staff_id=profile.id, status=AppointmentStatus.cancelled)
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+    monkeypatch.setattr(bookings_service, "cancel_booking", fake_cancel)
+
+    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    assert res.status_code == 200
+
+
+def test_staff_puede_reprogramar_su_propio_turno(client, monkeypatch):
+    profile = make_profile(UserRole.staff, salon_id=SALON_ID)
+    as_profile(profile)
+    appt = make_appointment(salon_id=SALON_ID, staff_id=profile.id)
+
+    async def fake_get(session, appointment_id):
+        return appt
+
+    async def fake_reschedule(session, appointment_id, new_start, new_staff_id=None):
+        return make_appointment(salon_id=SALON_ID, staff_id=profile.id, start_time=new_start)
+
+    monkeypatch.setattr(bookings_service, "get_booking", fake_get)
+    monkeypatch.setattr(bookings_service, "reschedule_booking", fake_reschedule)
+
+    res = client.post(
+        f"/api/v1/bookings/{appt.id}/reschedule",
+        json={"start_time": START.isoformat()},
+    )
+    assert res.status_code == 200
+
+
+def test_staff_no_puede_reasignar_su_turno_a_otro_staff(client, monkeypatch):
+    """Puede mover el horario de su propio turno, pero no pasárselo a otra
+    profesional — eso queda para un admin del salón."""
     profile = make_profile(UserRole.staff, salon_id=SALON_ID)
     as_profile(profile)
     appt = make_appointment(salon_id=SALON_ID, staff_id=profile.id)
@@ -574,7 +644,10 @@ def test_staff_no_puede_cancelar_ni_su_propio_turno(client, monkeypatch):
 
     monkeypatch.setattr(bookings_service, "get_booking", fake_get)
 
-    res = client.post(f"/api/v1/bookings/{appt.id}/cancel", json={})
+    res = client.post(
+        f"/api/v1/bookings/{appt.id}/reschedule",
+        json={"start_time": START.isoformat(), "staff_id": str(uuid.uuid4())},
+    )
     assert res.status_code == 403
     assert res.json()["code"] == "permission_denied"
 

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import require_roles
+from app.api.deps import has_full_access, require_roles
 from app.core.config import get_settings
 from app.core.errors import BookingError, PermissionDenied
 from app.db.models import Profile, UserRole
@@ -129,6 +129,19 @@ async def list_blocks(
     session: AsyncSession = Depends(get_session),
 ) -> list[GoogleCalendarBlockOut]:
     """Owner o staff: la agenda compartida necesita mostrar estos bloqueos en
-    todas las columnas, no solo al owner."""
+    todas las columnas, no solo al owner — pero el título real del evento de
+    Google (`summary`) es personal de quien conectó el calendario. Se lo
+    devolvemos tal cual solo a quien tiene acceso completo (`has_full_access`)
+    o al propio profesional bloqueado; al resto del staff les llega el bloqueo
+    (para que la franja siga apareciendo como ocupada) pero sin el texto —
+    el frontend ya cae a un genérico "Bloqueado (Google)" cuando `summary` es
+    `None`."""
     rows = await google_calendar.list_blocks(session, profile.salon_id, date_from, date_to)
-    return [GoogleCalendarBlockOut.model_validate(r) for r in rows]
+    can_see_summaries = has_full_access(profile)
+    result = []
+    for row in rows:
+        out = GoogleCalendarBlockOut.model_validate(row)
+        if not can_see_summaries and row.staff_id != profile.id:
+            out.summary = None
+        result.append(out)
+    return result
