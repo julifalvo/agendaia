@@ -145,13 +145,13 @@ function workingBlock(dateFrom: string, dateTo: string = dateFrom) {
   return blocks;
 }
 
-function setupApiGet(bookings: unknown[] = [BOOKING]) {
+function setupApiGet(bookings: unknown[] = [BOOKING], googleBlocks: unknown[] = []) {
   apiGetMock.mockImplementation(async (path: string) => {
     if (path === "/staff") return [STAFF_1, STAFF_2];
     if (path === "/services/mine") return [SERVICE];
     if (path.startsWith("/bookings?")) return bookings;
     if (path.startsWith("/salon/closures")) return [];
-    if (path.startsWith("/admin/google-calendar/blocks")) return [];
+    if (path.startsWith("/admin/google-calendar/blocks")) return googleBlocks;
     if (path.startsWith("/admin/google-calendar/status")) {
       return { connected: false, calendar_id: null, connected_at: null, last_synced_at: null };
     }
@@ -318,5 +318,23 @@ describe("AdminCalendar", () => {
         expect.objectContaining({ staff_id: "staff-2" }),
       ),
     );
+  });
+
+  it("un admin ve el detalle de un bloqueo de Google Calendar como texto, no solo al pasar el mouse", async () => {
+    const GOOGLE_BLOCK = {
+      id: "gb-1",
+      staff_id: "staff-1",
+      summary: "Psiquiatra",
+      starts_at: isoAt(0, 15),
+      ends_at: isoAt(0, 16),
+    };
+    setupApiGet([], [GOOGLE_BLOCK]);
+    mockUseProfile.mockReturnValue({ profile: ownerProfile(), loading: false, refresh: vi.fn() });
+
+    renderCalendar();
+
+    // No alcanza con que esté en el DOM como `title` (tooltip invisible en
+    // touch): tiene que ser texto visible dentro del recuadro.
+    expect(await screen.findByText("Psiquiatra")).toBeInTheDocument();
   });
 });

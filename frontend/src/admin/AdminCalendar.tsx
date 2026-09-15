@@ -725,22 +725,27 @@ export function AdminCalendar() {
                     );
                   })}
 
-                  {googleBlocksFor(col).map((block) => (
-                    <div
-                      key={block.id}
-                      title={block.summary ?? "Bloqueado (Google)"}
-                      className="pointer-events-none absolute inset-x-0.5 z-10 overflow-hidden rounded bg-[repeating-linear-gradient(45deg,rgba(0,0,0,0.06),rgba(0,0,0,0.06)_4px,transparent_4px,transparent_8px)] text-[10px] text-charcoal/50"
-                      style={{
-                        top: (localMinutesSinceMidnight(block.starts_at) - DAY_START_MIN) * PX_PER_MIN,
-                        height: Math.max(
-                          (localMinutesSinceMidnight(block.ends_at) -
-                            localMinutesSinceMidnight(block.starts_at)) *
-                            PX_PER_MIN,
-                          4,
-                        ),
-                      }}
-                    />
-                  ))}
+                  {googleBlocksFor(col).map((block) => {
+                    const label = block.summary ?? "Bloqueado (Google)";
+                    return (
+                      <div
+                        key={block.id}
+                        title={label}
+                        className="pointer-events-none absolute inset-x-0.5 z-10 flex items-center justify-center overflow-hidden rounded bg-[repeating-linear-gradient(45deg,rgba(0,0,0,0.06),rgba(0,0,0,0.06)_4px,transparent_4px,transparent_8px)] px-1 text-center text-[10px] text-charcoal/50"
+                        style={{
+                          top: (localMinutesSinceMidnight(block.starts_at) - DAY_START_MIN) * PX_PER_MIN,
+                          height: Math.max(
+                            (localMinutesSinceMidnight(block.ends_at) -
+                              localMinutesSinceMidnight(block.starts_at)) *
+                              PX_PER_MIN,
+                            4,
+                          ),
+                        }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  })}
 
                   {bookingsFor(col).map((booking) => {
                     const service = services.find((s) => s.id === booking.service_id);
