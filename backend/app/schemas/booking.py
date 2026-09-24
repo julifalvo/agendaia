@@ -9,6 +9,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.db.models import AppointmentStatus, PaymentMethod, PaymentStatus
 
 
+class SalonPublicOut(BaseModel):
+    """Datos de marca del salón para pintar el sitio público — sin nada
+    operativo (horarios, políticas), eso ya viaja implícito en `/availability`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    theme_color: str | None
+    logo_url: str | None
+    transfer_alias: str | None
+    transfer_cvu: str | None
+    transfer_account_name: str | None
+
+
 class SlotOut(BaseModel):
     start: dt.datetime
     end: dt.datetime

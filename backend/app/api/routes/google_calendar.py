@@ -15,8 +15,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import has_full_access, require_roles
-from app.core.config import get_settings
-from app.core.errors import BookingError, PermissionDenied
+from app.core.errors import BookingError
 from app.db.models import Profile, UserRole
 from app.db.session import get_session
 from app.schemas.google_calendar import (
@@ -32,17 +31,10 @@ router = APIRouter(prefix="/admin/google-calendar", tags=["google-calendar"])
 
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
-
-def _require_google_calendar_admin(
-    profile: Profile = Depends(require_roles(UserRole.owner)),
-) -> Profile:
-    """Conectar/sincronizar Google Calendar queda reservado a una única
-    cuenta (ver `google_calendar_allowed_email`) — el resto de owners y
-    staff del salón ni siquiera debe ver esta sección."""
-    allowed_email = get_settings().google_calendar_allowed_email.strip().lower()
-    if not profile.email or profile.email.strip().lower() != allowed_email:
-        raise PermissionDenied("No tenés permisos para gestionar Google Calendar")
-    return profile
+#: Conectar/sincronizar Google Calendar queda reservado al owner del salón
+#: (no a un email global fijo — eso bloqueaba a cualquier salón que no fuera
+#: el primero). El resto del staff ni siquiera debe ver esta sección.
+_require_google_calendar_admin = require_roles(UserRole.owner)
 
 
 @router.get("/status", response_model=GoogleCalendarStatusOut)

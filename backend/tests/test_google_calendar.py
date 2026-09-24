@@ -92,7 +92,9 @@ async def test_push_created_no_op_sin_configuracion():
     appointment = make_appointment()
     # No lanza y no toca la sesión: _NoTouchSession rompería el test si
     # push_appointment_created intentara usarla.
-    await google_calendar.push_appointment_created(_NoTouchSession(), appointment, "Manicura")
+    await google_calendar.push_appointment_created(
+        _NoTouchSession(), appointment, "Manicura", "MC Nails Studio"
+    )
 
 
 @pytest.mark.asyncio
@@ -108,7 +110,9 @@ async def test_push_updated_nunca_propaga_aunque_el_turno_este_incompleto():
     appointment = SimpleNamespace(id=uuid.uuid4(), salon_id=SALON_ID)  # sin start_time, etc.
     # Sigue no-op porque no está configurado; si lo estuviera, el error de
     # atributo faltante también quedaría atrapado (ver _push).
-    await google_calendar.push_appointment_updated(_NoTouchSession(), appointment, "Manicura")
+    await google_calendar.push_appointment_updated(
+        _NoTouchSession(), appointment, "Manicura", "MC Nails Studio"
+    )
 
 
 # --- pull: no-op sin configuración / sin conexión ----------------------------

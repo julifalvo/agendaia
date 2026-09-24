@@ -5,6 +5,7 @@ import { haptic } from "../lib/haptics";
 import { formatServicePrice, toDisplayBooking } from "../lib/mappers";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
+import { useSalon } from "../hooks/useSalonContext";
 import { BookingCard } from "./BookingCard";
 import { ConfettiBurst } from "./ConfettiBurst";
 import type { ApiAvailability, ApiBooking, ApiCategory, ApiPublicStaff, ApiService, ApiSlot } from "../types/api";
@@ -17,10 +18,9 @@ const DEPOSIT_AMOUNT = 8500;
 
 // Única forma de pagar la seña: transferencia directa (sin pasarela). El
 // salón confirma el turno a mano al ver la transferencia en su banco — ver
-// POST /bookings/{id}/payment-received en el panel de administración.
-const TRANSFER_ALIAS = "martu.manicura";
-const TRANSFER_CVU = "0000003100008080724270";
-const TRANSFER_NAME = "Martina Yael Carballo";
+// POST /bookings/{id}/payment-received en el panel de administración. Los
+// datos en sí vienen de `salon.transfer_*` (ver useSalon), nunca hardcodeados
+// acá: eran los datos bancarios personales de una sola dueña de salón.
 
 const depositFormatter = new Intl.NumberFormat("es-AR", {
   style: "currency",
@@ -279,14 +279,32 @@ function CopyableField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TransferDetails() {
+function TransferDetails({
+  alias,
+  cvu,
+  accountName,
+}: {
+  alias: string | null | undefined;
+  cvu: string | null | undefined;
+  accountName: string | null | undefined;
+}) {
+  if (!alias || !cvu || !accountName) {
+    // Nunca mostrar datos parciales/vacíos como si fueran válidos, y nunca
+    // caer en los de otro salón — mejor pedirle a la clienta que consulte.
+    return (
+      <p className="mt-2 text-sm text-charcoal/75">
+        Consultá al salón cómo abonar la seña.
+      </p>
+    );
+  }
+
   return (
     <div className="mt-2 flex flex-col text-sm text-charcoal/75">
-      <CopyableField label="Alias" value={TRANSFER_ALIAS} />
-      <CopyableField label="CVU" value={TRANSFER_CVU} />
+      <CopyableField label="Alias" value={alias} />
+      <CopyableField label="CVU" value={cvu} />
       <p className="py-1">
         <span className="text-charcoal/45">Titular:</span>{" "}
-        <span className="font-medium text-charcoal">{TRANSFER_NAME}</span>
+        <span className="font-medium text-charcoal">{accountName}</span>
       </p>
     </div>
   );
@@ -469,6 +487,7 @@ function ServiceOption({
 export function BookingFlow() {
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { salon } = useSalon();
   // La sesión de Supabase puede pertenecer a un owner/staff que quedó
   // logueado y entra a la página pública (ej. para probar el flujo): el
   // backend solo autocompleta `client_id` desde el perfil para el rol
@@ -794,7 +813,11 @@ export function BookingFlow() {
             </span>{" "}
             a:
           </p>
-          <TransferDetails />
+          <TransferDetails
+            alias={salon?.transfer_alias}
+            cvu={salon?.transfer_cvu}
+            accountName={salon?.transfer_account_name}
+          />
         </div>
         {willEmailCalendarInvite && (
           <p className="mt-4 text-center text-sm text-charcoal/55">
@@ -1278,7 +1301,11 @@ export function BookingFlow() {
                 </span>{" "}
                 por transferencia a:
               </p>
-              <TransferDetails />
+              <TransferDetails
+                alias={salon?.transfer_alias}
+                cvu={salon?.transfer_cvu}
+                accountName={salon?.transfer_account_name}
+              />
             </div>
 
             {bookingAsGuest && (

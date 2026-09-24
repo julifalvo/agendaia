@@ -75,7 +75,7 @@ class FakeSession:
 
 
 def make_salon(**overrides):
-    base = dict(id=SALON_ID, is_active=True)
+    base = dict(id=SALON_ID, is_active=True, name="MC Nails Studio")
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -121,7 +121,7 @@ def patched(monkeypatch):
     async def load_service(session, salon_id, service_id):
         return state["service"]
 
-    async def noop_notify(event, appointment, **extra):
+    async def noop_notify(session, event, appointment, **extra):
         state["notified"].append((event, extra))
 
     monkeypatch.setattr(availability, "load_salon", load_salon)

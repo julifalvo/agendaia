@@ -286,12 +286,12 @@ async def create_booking(
 
     await session.refresh(appointment)
     await attach_client_name(session, appointment)
-    await notifications.notify("booking.created", appointment)
-    await email.send_booking_confirmation(appointment, service.name)
+    await notifications.notify(session, "booking.created", appointment)
+    await email.send_booking_confirmation(appointment, service.name, salon.name)
     staff_profile = await session.get(Profile, staff_id)
     if staff_profile is not None:
-        await email.send_staff_notification(appointment, service.name, staff_profile)
-    await google_calendar.push_appointment_created(session, appointment, service.name)
+        await email.send_staff_notification(appointment, service.name, staff_profile, salon.name)
+    await google_calendar.push_appointment_created(session, appointment, service.name, salon.name)
 
     # `mp_init_point` no es una columna: es la URL de checkout que el
     # frontend necesita para redirigir, generada acá mismo así el cliente no
@@ -443,7 +443,7 @@ async def transition_status(
     await session.commit()
     await session.refresh(appointment)
     await notifications.notify(
-        _STATUS_EVENTS[new_status], appointment, reason=reason
+        session, _STATUS_EVENTS[new_status], appointment, reason=reason
     )
     if new_status is AppointmentStatus.cancelled:
         # completed/no_show no tocan el calendario: el evento ya pasó, no hay
@@ -607,9 +607,9 @@ async def reschedule_booking(
 
     await session.refresh(appointment)
     await notifications.notify(
-        "booking.rescheduled", appointment, previous_start=previous_start.isoformat()
+        session, "booking.rescheduled", appointment, previous_start=previous_start.isoformat()
     )
-    await google_calendar.push_appointment_updated(session, appointment, service.name)
+    await google_calendar.push_appointment_updated(session, appointment, service.name, salon.name)
     return appointment
 
 

@@ -57,8 +57,8 @@ _APP_TAG_KEY = "agendaia_appointment_id"
 #: ("[Fulana] vacaciones") para indicar que bloquea a una profesional
 #: puntual. Sin tag, el evento bloquea solo a quien conectó el calendario
 #: (ver `_resolve_block_staff_id`) — no a todo el salón: ese único Google
-#: Calendar conectado es personal de quien lo conectó (hoy, marticarballo),
-#: así que la mayoría de sus eventos no van a llevar tag nunca.
+#: Calendar conectado es personal de quien lo conectó (el owner del salón,
+#: hoy siempre), así que la mayoría de sus eventos no van a llevar tag nunca.
 _STAFF_TAG_RE = re.compile(r"^\[([^\]]+)\]")
 
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
@@ -245,11 +245,11 @@ async def _access_token(connection: GoogleCalendarConnection) -> str:
 # --- Push (best-effort, nunca propaga) ---------------------------------------
 
 
-def _event_body(appointment: Appointment, service_name: str) -> dict:
+def _event_body(appointment: Appointment, service_name: str, salon_name: str) -> dict:
     client_label = appointment.guest_name or "Cliente"
     return {
         "summary": f"{service_name} — {client_label}",
-        "description": "Turno reservado en MC Nails Studio.",
+        "description": f"Turno reservado en {salon_name}.",
         "start": {"dateTime": appointment.start_time.isoformat()},
         "end": {"dateTime": appointment.end_time.isoformat()},
         "extendedProperties": {"private": {_APP_TAG_KEY: str(appointment.id)}},
@@ -305,15 +305,15 @@ async def _push(
 
 
 async def push_appointment_created(
-    session: AsyncSession, appointment: Appointment, service_name: str
+    session: AsyncSession, appointment: Appointment, service_name: str, salon_name: str
 ) -> None:
-    await _push(session, appointment, lambda: _event_body(appointment, service_name))
+    await _push(session, appointment, lambda: _event_body(appointment, service_name, salon_name))
 
 
 async def push_appointment_updated(
-    session: AsyncSession, appointment: Appointment, service_name: str
+    session: AsyncSession, appointment: Appointment, service_name: str, salon_name: str
 ) -> None:
-    await _push(session, appointment, lambda: _event_body(appointment, service_name))
+    await _push(session, appointment, lambda: _event_body(appointment, service_name, salon_name))
 
 
 async def push_appointment_cancelled(session: AsyncSession, appointment: Appointment) -> None:

@@ -94,6 +94,20 @@ class Salon(Base):
     slug: Mapped[str] = mapped_column(Text, unique=True)
     timezone: Mapped[str] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
+    #: Hex (#RRGGBB). NULL = paleta candy-pink por defecto del frontend.
+    theme_color: Mapped[str | None] = mapped_column(Text)
+    #: URL pública. NULL = el frontend usa el lockup de marca por defecto.
+    logo_url: Mapped[str | None] = mapped_column(Text)
+    #: Datos de transferencia para pagar la seña. NULL en cualquiera de los
+    #: tres = el frontend no puede ofrecer pago por transferencia (nunca
+    #: cae a los datos de otro salón).
+    transfer_alias: Mapped[str | None] = mapped_column(Text)
+    transfer_cvu: Mapped[str | None] = mapped_column(Text)
+    transfer_account_name: Mapped[str | None] = mapped_column(Text)
+    #: Webhook (Zapier/Make/n8n) para notificaciones de turnos de ESTE salón.
+    #: NULL = no-op, ver app/services/notifications.py. Nunca global: incluye
+    #: nombre/teléfono de la clienta, no puede mandarse al webhook de otro salón.
+    notifications_webhook_url: Mapped[str | None] = mapped_column(Text)
     min_lead_minutes: Mapped[int] = mapped_column(Integer)
     max_advance_days: Mapped[int] = mapped_column(Integer)
     slot_step_minutes: Mapped[int] = mapped_column(Integer)

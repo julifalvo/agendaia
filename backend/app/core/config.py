@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     supabase_service_key: str = ""
     supabase_jwt_secret: str = ""
 
-    # Webhook de notificaciones (WhatsApp/Email) descrito en ARCHITECTURE.md
-    notifications_webhook_url: str | None = None
-
     # Mercado Pago (Checkout Pro) para la seña de la reserva. Ver
     # app/services/payments.py.
     mercadopago_access_token: str = ""
@@ -51,10 +48,6 @@ class Settings(BaseSettings):
     #: Clave Fernet (`Fernet.generate_key()`, 32 bytes url-safe base64) para
     #: cifrar el refresh_token antes de guardarlo. Vacía = feature deshabilitada.
     google_calendar_token_key: str = ""
-    #: Única cuenta autorizada a conectar/sincronizar Google Calendar. El
-    #: resto de owners y staff del salón no debe ver ni poder usar esta
-    #: sección, aunque tengan rol owner.
-    google_calendar_allowed_email: str = "marticarballo2711@gmail.com"
 
     #: Emails con visibilidad total de la agenda del salón (ven los turnos de
     #: todo el staff, no solo los propios), sin importar su rol. El resto de

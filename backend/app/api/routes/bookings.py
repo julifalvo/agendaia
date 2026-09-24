@@ -23,6 +23,7 @@ from app.schemas.booking import (
     BookingReschedule,
     BookingStatusUpdate,
     PaymentStatusUpdate,
+    SalonPublicOut,
     SlotOut,
 )
 from app.services import availability, bookings
@@ -57,6 +58,21 @@ def _authorize_mutation(profile: Profile, appointment: Appointment) -> None:
     sin acceso completo puede cancelar/reprogramar/cambiar el estado de sus
     propios turnos desde el calendario, no los ajenos."""
     _authorize_access(profile, appointment)
+
+
+@router.get("/salons/{salon_id}", response_model=SalonPublicOut)
+async def get_salon_branding(
+    salon_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+) -> SalonPublicOut:
+    """Nombre/color/logo del salón para pintar el sitio público antes de login.
+
+    Público a propósito, igual que `/availability`: el sitio de reserva
+    necesita esto para pintarse con la marca del salón sin que el visitante
+    haya iniciado sesión todavía. Sin datos operativos acá — ver `SalonPublicOut`.
+    """
+    salon = await availability.load_salon(session, salon_id)
+    return SalonPublicOut.model_validate(salon)
 
 
 @router.get("/availability", response_model=AvailabilityOut)

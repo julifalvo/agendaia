@@ -35,7 +35,8 @@ una base real, ver `scripts/local_auth_stub.sql` y `scripts/seed_local.sql`
 .venv/Scripts/python scripts/fake_webhook_receiver.py   # escucha en :9099
 ```
 
-Apuntar `NOTIFICATIONS_WEBHOOK_URL=http://localhost:9099/hook` en `.env` y
+Cargar `http://localhost:9099/hook` en `notifications_webhook_url` del salón
+de prueba (columna en `salons`, no variable de entorno — es por salón) y
 loguea cada payload que reciba. Es una herramienta de desarrollo, no parte
 de la app.
 

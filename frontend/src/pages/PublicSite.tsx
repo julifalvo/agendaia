@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuthContext";
 import { useProfile } from "../hooks/useProfileContext";
+import { useSalon } from "../hooks/useSalonContext";
 import { BookingFlow } from "../components/BookingFlow";
 import { DecorBackground } from "../components/DecorBackground";
 import { Divider } from "../components/Divider";
@@ -17,12 +18,13 @@ import { Welcome } from "../components/Welcome";
 function TopBar() {
   const { user, signOut, loading } = useAuth();
   const { profile } = useProfile();
+  const { salon } = useSalon();
   const isStaff = profile?.role === "owner" || profile?.role === "staff";
 
   return (
     <div className="safe-top sticky top-0 z-20 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
       <div className="mx-auto flex max-w-md items-center justify-between px-5 py-3 sm:px-6 lg:max-w-5xl lg:px-10 lg:py-4">
-        <Logo />
+        <Logo logoUrl={salon?.logo_url} />
 
         {!loading && isStaff && (
           <div className="flex items-center gap-3 text-xs">
@@ -49,10 +51,12 @@ function TopBar() {
 }
 
 function Hero() {
+  const { salon } = useSalon();
+
   return (
     <div className="mx-auto max-w-md px-5 pb-10 pt-10 text-center sm:px-6 lg:max-w-none lg:pt-16">
       <div className="glow-orb mx-auto inline-block">
-        <Wordmark className="h-20 lg:h-24" />
+        <Wordmark className="h-20 lg:h-24" logoUrl={salon?.logo_url} />
       </div>
 
       <div

@@ -27,22 +27,22 @@ def _ics_date(value: dt.datetime) -> str:
 
 
 def build_booking_ics(
-    appointment: Appointment, service_name: str, organizer_email: str
+    appointment: Appointment, service_name: str, organizer_email: str, salon_name: str
 ) -> str:
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//MC Nails Studio//Turnos//ES",
+        "PRODID:-//AgendaIA//Turnos//ES",
         "CALSCALE:GREGORIAN",
         "METHOD:REQUEST",
         "BEGIN:VEVENT",
-        f"UID:{appointment.id}@mcnailsstudio",
+        f"UID:{appointment.id}@agendaia",
         f"DTSTAMP:{_ics_date(dt.datetime.now(dt.UTC))}",
         f"DTSTART:{_ics_date(appointment.start_time)}",
         f"DTEND:{_ics_date(appointment.end_time)}",
-        f"SUMMARY:{_ics_escape(f'{service_name} — MC Nails Studio')}",
-        f"DESCRIPTION:{_ics_escape('Tu turno en MC Nails Studio.')}",
-        f"ORGANIZER;CN=MC Nails Studio:mailto:{organizer_email}",
+        f"SUMMARY:{_ics_escape(f'{service_name} — {salon_name}')}",
+        f"DESCRIPTION:{_ics_escape(f'Tu turno en {salon_name}.')}",
+        f"ORGANIZER;CN={_ics_escape(salon_name)}:mailto:{organizer_email}",
         f"ATTENDEE;CN={_ics_escape(appointment.guest_name or 'Cliente')};RSVP=TRUE:"
         f"mailto:{appointment.guest_email}",
         "STATUS:CONFIRMED",

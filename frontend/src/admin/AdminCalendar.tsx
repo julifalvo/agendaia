@@ -30,11 +30,6 @@ const SLOT_COUNT = (DAY_END_MIN - DAY_START_MIN) / SLOT_MIN;
 const ROW_PX = SLOT_MIN * PX_PER_MIN;
 const GRID_HEIGHT_PX = SLOT_COUNT * ROW_PX;
 
-// Conectar/sincronizar Google Calendar queda reservado a esta cuenta —
-// coincide con `google_calendar_allowed_email` en el backend, que además lo
-// exige del lado del servidor (esto solo evita mostrar la sección al resto).
-const GOOGLE_CALENDAR_ALLOWED_EMAIL = "marticarballo2711@gmail.com";
-
 function addDaysISO(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + days);
@@ -140,8 +135,9 @@ export function AdminCalendar() {
   const dragMovedRef = useRef(false);
 
   const isOwner = profile?.role === "owner";
-  const canManageGoogleCalendar =
-    isOwner && profile?.email?.toLowerCase() === GOOGLE_CALENDAR_ALLOWED_EMAIL;
+  // Coincide con el backend (require_roles(owner) en la ruta de Google
+  // Calendar): reservado al owner del salón, no a un email fijo.
+  const canManageGoogleCalendar = isOwner;
   const canViewAllStaff = hasFullAccess(profile);
   const activeStaff = useMemo(() => staff.filter((s) => s.is_active), [staff]);
   const visibleStaff = useMemo(

@@ -6,6 +6,16 @@ import type { AppointmentStatus } from "./booking";
  * que consume `BookingCard`; `lib/mappers.ts` traduce de uno a otro.
  */
 
+export interface ApiSalon {
+  id: string;
+  name: string;
+  theme_color: string | null;
+  logo_url: string | null;
+  transfer_alias: string | null;
+  transfer_cvu: string | null;
+  transfer_account_name: string | null;
+}
+
 export interface ApiService {
   id: string;
   salon_id: string;

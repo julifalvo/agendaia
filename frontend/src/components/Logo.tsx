@@ -51,8 +51,18 @@ export function Monogram({ className = "" }: { className?: string }) {
   );
 }
 
-export function Wordmark({ className = "" }: { className?: string }) {
+export function Wordmark({
+  className = "",
+  logoUrl = null,
+}: {
+  className?: string;
+  logoUrl?: string | null;
+}) {
   const gradientId = useId();
+
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" className={`object-contain ${className}`} />;
+  }
 
   return (
     <svg viewBox="0 0 200 130" className={className} aria-hidden="true">
@@ -117,7 +127,17 @@ export function Wordmark({ className = "" }: { className?: string }) {
  * definición y se ve como una mancha en vez de dos letras — por eso acá
  * "MC" se resuelve en texto plano (sin solapar), no con el SVG grande.
  */
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({
+  className = "",
+  logoUrl = null,
+}: {
+  className?: string;
+  logoUrl?: string | null;
+}) {
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" className={`h-8 object-contain ${className}`} />;
+  }
+
   return (
     <div className={`flex items-baseline gap-2 ${className}`}>
       <span className="font-display text-xl font-semibold tracking-tight text-bubblegum">

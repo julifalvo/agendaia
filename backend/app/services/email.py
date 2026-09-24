@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 _TIMEOUT_SECONDS = 10.0
 
 
-async def send_booking_confirmation(appointment: Appointment, service_name: str) -> None:
+async def send_booking_confirmation(
+    appointment: Appointment, service_name: str, salon_name: str
+) -> None:
     """Manda el mail con el turno adjunto al email del invitado, si lo dejó.
 
     No-op silencioso si no hay email o Resend no está configurado — no
@@ -33,12 +35,12 @@ async def send_booking_confirmation(appointment: Appointment, service_name: str)
     if not appointment.guest_email or not settings.resend_api_key:
         return
 
-    ics = build_booking_ics(appointment, service_name, settings.resend_from_email)
+    ics = build_booking_ics(appointment, service_name, settings.resend_from_email, salon_name)
     greeting = f" {appointment.guest_name}" if appointment.guest_name else ""
     body = {
-        "from": f"MC Nails Studio <{settings.resend_from_email}>",
+        "from": f"{salon_name} <{settings.resend_from_email}>",
         "to": [appointment.guest_email],
-        "subject": f"Tu turno en MC Nails Studio — {service_name}",
+        "subject": f"Tu turno en {salon_name} — {service_name}",
         "html": (
             f"<p>¡Hola{greeting}!</p>"
             f"<p>Confirmamos tu turno de <strong>{service_name}</strong>. "
@@ -46,7 +48,7 @@ async def send_booking_confirmation(appointment: Appointment, service_name: str)
         ),
         "attachments": [
             {
-                "filename": "turno-mc-nails-studio.ics",
+                "filename": "turno.ics",
                 "content": base64.b64encode(ics.encode("utf-8")).decode("ascii"),
             }
         ],
@@ -72,7 +74,7 @@ async def send_booking_confirmation(appointment: Appointment, service_name: str)
 
 
 async def send_staff_notification(
-    appointment: Appointment, service_name: str, staff: Profile
+    appointment: Appointment, service_name: str, staff: Profile, salon_name: str
 ) -> None:
     """Avisa por mail a la profesional asignada que le agendaron un turno.
 
@@ -91,10 +93,10 @@ async def send_staff_notification(
         return
 
     client_label = appointment.client_name or appointment.guest_name or "Un cliente"
-    ics = build_booking_ics(appointment, service_name, settings.resend_from_email)
+    ics = build_booking_ics(appointment, service_name, settings.resend_from_email, salon_name)
     greeting = f" {staff.full_name}" if staff.full_name else ""
     body = {
-        "from": f"MC Nails Studio <{settings.resend_from_email}>",
+        "from": f"{salon_name} <{settings.resend_from_email}>",
         "to": [staff.email],
         "subject": f"Nuevo turno: {service_name} con {client_label}",
         "html": (
@@ -104,7 +106,7 @@ async def send_staff_notification(
         ),
         "attachments": [
             {
-                "filename": "turno-mc-nails-studio.ics",
+                "filename": "turno.ics",
                 "content": base64.b64encode(ics.encode("utf-8")).decode("ascii"),
             }
         ],
