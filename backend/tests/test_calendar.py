@@ -34,7 +34,7 @@ def test_escapa_comas_en_el_nombre_del_invitado():
         make_appointment(), "Esculpidas", "turnos@mcnailsstudio.com", "MC Nails Studio"
     )
 
-    assert "ATTENDEE;CN=Julieta\\, Pérez;RSVP=TRUE:mailto:julieta@example.com" in ics
+    assert "ATTENDEE;CN=Julieta\\, Pérez;RSVP=FALSE:mailto:julieta@example.com" in ics
 
 
 def test_usa_method_request_para_que_el_cliente_de_mail_ofrezca_agendarlo():
