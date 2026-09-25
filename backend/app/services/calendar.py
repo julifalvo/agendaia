@@ -43,7 +43,7 @@ def build_booking_ics(
         f"SUMMARY:{_ics_escape(f'{service_name} — {salon_name}')}",
         f"DESCRIPTION:{_ics_escape(f'Tu turno en {salon_name}.')}",
         f"ORGANIZER;CN={_ics_escape(salon_name)}:mailto:{organizer_email}",
-        f"ATTENDEE;CN={_ics_escape(appointment.guest_name or 'Cliente')};RSVP=TRUE:"
+        f"ATTENDEE;CN={_ics_escape(appointment.guest_name or 'Cliente')};RSVP=FALSE:"
         f"mailto:{appointment.guest_email}",
         "STATUS:CONFIRMED",
         "SEQUENCE:0",
