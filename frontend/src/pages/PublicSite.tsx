@@ -12,7 +12,6 @@ import { Logo, Monogram, Wordmark } from "../components/Logo";
 import { Marquee } from "../components/Marquee";
 import { PolishSwatches } from "../components/PolishSwatches";
 import { Sparkle } from "../components/Sparkle";
-import { SpringFestivity } from "../components/SpringFestivity";
 import { Welcome } from "../components/Welcome";
 
 function TopBar() {
@@ -155,7 +154,6 @@ export function PublicSite() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-soft-white">
       <DecorBackground />
-      <SpringFestivity />
 
       <TopBar />
 

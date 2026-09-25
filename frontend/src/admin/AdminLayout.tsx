@@ -4,7 +4,6 @@ import { useProfile } from "../hooks/useProfileContext";
 import { DecorBackground } from "../components/DecorBackground";
 import { LoginPanel } from "../components/LoginPanel";
 import { Logo } from "../components/Logo";
-import { SpringFestivity } from "../components/SpringFestivity";
 import { hasFullAccess } from "../lib/access";
 
 interface NavLinkDef {
@@ -32,7 +31,7 @@ function navLinkClass({ isActive }: { isActive: boolean }): string {
   }`;
 }
 
-function AdminLayoutBody() {
+export function AdminLayout() {
   const { user, signOut, loading: authLoading } = useAuth();
   const { profile, loading: profileLoading } = useProfile();
 
@@ -125,18 +124,6 @@ function AdminLayoutBody() {
         <Outlet />
       </div>
     </div>
-  );
-}
-
-/** Muestra el saludo de primavera apenas se entra a `/admin`, sin importar
- * en qué estado (cargando, login, panel) arranque — por eso vive afuera de
- * `AdminLayoutBody` en vez de en su branch final. */
-export function AdminLayout() {
-  return (
-    <>
-      <SpringFestivity />
-      <AdminLayoutBody />
-    </>
   );
 }
 
