@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
 import { Logo } from "../components/Logo";
+import { useSalon } from "../hooks/useSalonContext";
 
 export function PrivacyPolicy() {
+  const { salon } = useSalon();
+  const salonName = salon?.name ?? "Este salón";
+
   return (
     <main className="min-h-screen bg-soft-white">
       <div className="safe-top sticky top-0 z-10 border-b border-charcoal/8 bg-soft-white/80 backdrop-blur-lg">
@@ -18,7 +22,7 @@ export function PrivacyPolicy() {
 
         <div className="mt-8 flex flex-col gap-6 text-sm leading-relaxed text-charcoal/70">
           <p>
-            MC Nails Studio ("nosotros") opera este sitio y el panel de administración
+            {salonName} ("nosotros") opera este sitio y el panel de administración
             para gestionar turnos del salón. Esta política explica qué datos recolectamos
             y cómo los usamos.
           </p>

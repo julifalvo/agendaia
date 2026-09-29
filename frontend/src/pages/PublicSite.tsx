@@ -150,6 +150,7 @@ export function PublicSite() {
   const [entered, setEntered] = useState(() =>
     new URLSearchParams(window.location.search).has("pago"),
   );
+  const { salon } = useSalon();
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-soft-white">
@@ -209,8 +210,8 @@ export function PublicSite() {
                   Mirá los diseños en Instagram
                 </a>
 
-                <p className="text-center text-xs tracking-wide text-charcoal/35">
-                  MC NAILS STUDIO · hecho con cariño para tus uñas
+                <p className="text-center text-xs tracking-wide text-charcoal/35 uppercase">
+                  {salon?.name ?? "AgendaIA"} · hecho con cariño para tus uñas
                 </p>
 
                 <div className="flex items-center gap-3 text-[11px] text-charcoal/40">
