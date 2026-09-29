@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,5 +49,13 @@ async def mercadopago_webhook(
     if event_type != "payment" or not payment_id:
         return {"status": "ignored"}
 
-    await bookings.confirm_mercadopago_payment(session, str(payment_id))
+    salon_id_raw = request.query_params.get("salon_id")
+    salon_id: uuid.UUID | None = None
+    if salon_id_raw:
+        try:
+            salon_id = uuid.UUID(salon_id_raw)
+        except ValueError:
+            logger.warning("salon_id inválido en la notification_url: %s", salon_id_raw)
+
+    await bookings.confirm_mercadopago_payment(session, str(payment_id), salon_id)
     return {"status": "ok"}

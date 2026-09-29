@@ -63,20 +63,27 @@ localmente antes de cerrar (sin pushear) para tener un snapshot.
       real le llega a ninguna clienta de ningún salón) y eventualmente la
       verificación de Google OAuth.
 - [ ] Verificar el dominio en Resend una vez comprado.
-- [ ] `PrivacyPolicy.tsx` y `TermsOfService.tsx` siguen diciendo "MC Nails
-      Studio" hardcodeado como la entidad legal — falta hacerlo dinámico
-      (mismo patrón que el resto).
-- [ ] Footer de `PublicSite.tsx:215` — "MC NAILS STUDIO · hecho con cariño
-      para tus uñas", hardcodeado en todas las páginas.
-- [ ] `MERCADOPAGO_ACCESS_TOKEN` sigue siendo una sola variable global
-      (dormida hoy porque el frontend solo usa `"transfer"`) — arreglar
-      antes de activar MercadoPago como método de pago para cualquier salón,
-      mismo bug de fondo que tenía `transfer_alias`.
+- [x] ~~`PrivacyPolicy.tsx` y `TermsOfService.tsx` siguen diciendo "MC Nails
+      Studio" hardcodeado~~ y ~~footer de `PublicSite.tsx:215`~~ —
+      **resuelto (2026-09-29)**: los tres ahora usan `salon?.name` de
+      `useSalon()`, con un fallback genérico ("Este salón" / "AgendaIA")
+      mientras la sesión todavía no cargó. El handle de Instagram
+      (`@mcstudiodebelleza`, en las dos páginas legales y en el footer)
+      sigue hardcodeado — no hay un campo de contacto social por salón en
+      `salons` todavía; queda pendiente si se necesita para el reskin
+      liviano de un cliente nuevo.
+- [x] ~~`MERCADOPAGO_ACCESS_TOKEN` sigue siendo una sola variable global~~ —
+      **resuelto (2026-09-29)**: `salons.mercadopago_access_token_encrypted`
+      (cifrado con Fernet, misma clave que el refresh_token de Google
+      Calendar) + `salons.booking_deposit_amount`, editables por el owner
+      desde el panel (`/admin/payment-settings`, `GET`/`PATCH
+      /salon/payment-settings`). Sigue dormido en el frontend público (solo
+      ofrece `"transfer"`), pero ya no hay bug de fondo que arreglar antes de
+      activarlo por salón — ver migración
+      `20260929120000_salon_payment_settings.sql` y
+      `app/services/payments.py`.
 - [ ] UptimeRobot pingueando el backend para que Supabase (free tier) no se
       pause por inactividad.
-- [ ] `BOOKING_DEPOSIT_AMOUNT` sigue siendo global — ambos salones están
-      forzados al mismo monto de seña. No es bloqueante, pero si algún
-      cliente quiere un monto distinto, hay que hacerlo por salón.
 - [ ] Título de Swagger en `main.py:26` ("MC Nails Studio — API de
       Reservas") — cosmético, solo visible en `/docs`, baja prioridad.
 - [ ] Verificación de OAuth de Google (saca el cartel de "app no
@@ -88,3 +95,42 @@ localmente antes de cerrar (sin pushear) para tener un snapshot.
 
 - Implementación (pago único): $15.000–$25.000 ARS.
 - Suscripción mensual: $15.000 ARS/mes.
+
+## Alta de un tercer salón (o más)
+
+Con el trabajo de 429c3ea (multi-tenant real) y el de payment-settings de hoy
+(2026-09-29), sumar un salón nuevo ya no necesita tocar código: lo que antes
+era una env var global (seña, Mercado Pago) ahora es una fila en `salons` que
+el propio owner carga desde su panel, sin volver a tocar la base a mano ni
+pedir un deploy.
+
+Pasos:
+
+1. Insertar la fila en `salons` (mismo criterio que el segundo salón):
+   nombre, slug, timezone, políticas de reserva (`min_lead_minutes`,
+   `max_advance_days`, `slot_step_minutes`).
+2. Alta manual del primer owner (signup normal + `UPDATE profiles set
+   role='owner'`, ver `DEPLOYMENT.md`).
+3. El owner entra a su panel (`/admin/payment-settings`) y carga su propio
+   monto de seña y, si tiene, su access token de Mercado Pago — sin esto
+   sigue funcionando con transferencia y/o el default global del backend.
+4. Sitio nuevo en Netlify con su propio `VITE_SALON_ID`.
+5. Si quiere Google Calendar: agregarlo como test user en el proyecto de
+   Google Cloud usado (mientras la app siga en modo Testing, ver sección de
+   arriba).
+
+**Ya no bloqueante** (antes sí lo era): un tercer salón que quisiera su
+propia cuenta de Mercado Pago hubiera terminado compartiendo el token de
+otro salón — arreglado con `salons.mercadopago_access_token_encrypted`.
+
+**Sigue pendiente, no bloqueante:** `transfer_alias` / `transfer_cvu` /
+`transfer_account_name` y `notifications_webhook_url` todavía se cargan por
+SQL a mano (mismo criterio que el segundo salón), no desde el panel. Si se
+suman más clientes seguido, conviene darles el mismo tratamiento que a
+payment-settings (endpoint + UI en `/admin`) para sacar a Supabase del medio
+por completo.
+
+Pricing de referencia: el mismo acordado arriba para el segundo salón sigue
+aplicando — el costo marginal de infra por salón adicional sigue siendo
+~$0 (mismo backend/Supabase compartido), así que $15.000 ARS/mes por salón
+mantiene un margen muy alto.

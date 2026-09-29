@@ -26,7 +26,7 @@ from app.schemas.booking import (
     SalonPublicOut,
     SlotOut,
 )
-from app.services import availability, bookings
+from app.services import availability, bookings, payments
 from app.services.bookings import BookingRequest
 
 router = APIRouter(tags=["reservas"])
@@ -72,7 +72,19 @@ async def get_salon_branding(
     haya iniciado sesión todavía. Sin datos operativos acá — ver `SalonPublicOut`.
     """
     salon = await availability.load_salon(session, salon_id)
-    return SalonPublicOut.model_validate(salon)
+    return SalonPublicOut(
+        id=salon.id,
+        name=salon.name,
+        theme_color=salon.theme_color,
+        logo_url=salon.logo_url,
+        transfer_alias=salon.transfer_alias,
+        transfer_cvu=salon.transfer_cvu,
+        transfer_account_name=salon.transfer_account_name,
+        # Resuelto acá (no una columna cruda): el monto propio del salón, o
+        # el default global del backend si todavía no configuró el suyo — ver
+        # `payments.resolve_deposit_amount`.
+        booking_deposit_amount=payments.resolve_deposit_amount(salon),
+    )
 
 
 @router.get("/availability", response_model=AvailabilityOut)

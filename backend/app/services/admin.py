@@ -16,10 +16,12 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import ConflictError, ResourceNotFound, UpstreamError
 from app.db.models import (
     Appointment,
     Profile,
+    Salon,
     SalonClosure,
     Service,
     ServiceCategory,
@@ -31,12 +33,13 @@ from app.db.models import (
 from app.schemas.admin import (
     CategoryCreate,
     CategoryUpdate,
+    SalonPaymentSettingsUpdate,
     ScheduleBlockIn,
     ServiceCreate,
     ServiceUpdate,
     StaffInviteCreate,
 )
-from app.services import supabase_admin
+from app.services import payments, supabase_admin
 
 _STAFF_ROLES = (UserRole.owner, UserRole.staff)
 
@@ -656,3 +659,58 @@ async def delete_salon_closure(
         )
     await session.delete(closure)
     await session.commit()
+
+
+# --- Configuración de pagos (seña / Mercado Pago) ---------------------------
+
+
+async def _load_salon(session: AsyncSession, salon_id: uuid.UUID) -> Salon:
+    salon = await session.get(Salon, salon_id)
+    if salon is None:
+        raise ResourceNotFound("Salón inexistente", salon_id=str(salon_id))
+    return salon
+
+
+async def get_payment_settings(session: AsyncSession, salon_id: uuid.UUID) -> Salon:
+    return await _load_salon(session, salon_id)
+
+
+async def update_payment_settings(
+    session: AsyncSession, salon_id: uuid.UUID, payload: SalonPaymentSettingsUpdate
+) -> Salon:
+    """Actualización parcial: solo se tocan los campos presentes en `payload`
+    (ver docstring de `SalonPaymentSettingsUpdate` sobre el caso especial de
+    `mercadopago_access_token=""` para borrar el token guardado)."""
+    salon = await _load_salon(session, salon_id)
+
+    if payload.booking_deposit_amount is not None:
+        salon.booking_deposit_amount = payload.booking_deposit_amount
+
+    if payload.mercadopago_access_token is not None:
+        salon.mercadopago_access_token_encrypted = (
+            payments.encrypt_access_token(payload.mercadopago_access_token)
+            if payload.mercadopago_access_token
+            else None
+        )
+
+    await session.commit()
+    await session.refresh(salon)
+    return salon
+
+
+def payment_settings_out_fields(salon: Salon) -> dict:
+    """Arma los campos de `SalonPaymentSettingsOut` a partir del salón,
+    resolviendo el fallback al default global — separado de la ruta para
+    poder reusarlo desde el GET y el PATCH sin duplicar la lógica."""
+    settings = get_settings()
+    return {
+        "booking_deposit_amount": (
+            salon.booking_deposit_amount
+            if salon.booking_deposit_amount is not None
+            else settings.booking_deposit_amount
+        ),
+        "mercadopago_configured": bool(
+            salon.mercadopago_access_token_encrypted or settings.mercadopago_access_token
+        ),
+        "mercadopago_uses_salon_token": bool(salon.mercadopago_access_token_encrypted),
+    }
