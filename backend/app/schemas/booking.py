@@ -22,10 +22,6 @@ class SalonPublicOut(BaseModel):
     transfer_alias: str | None
     transfer_cvu: str | None
     transfer_account_name: str | None
-    #: Monto de la seña, ya resuelto (propio del salón o el default global del
-    #: backend) — ver `payments.resolve_deposit_amount`. Nunca el token de
-    #: Mercado Pago ni nada operativo, esto sigue siendo público.
-    booking_deposit_amount: Decimal
 
 
 class SlotOut(BaseModel):

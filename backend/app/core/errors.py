@@ -74,13 +74,3 @@ class UpstreamError(BookingError):
 
     status_code = 502
     code = "upstream_error"
-
-
-class BackendNotConfigured(BookingError):
-    """Falta configuración de infraestructura del backend (ej. la clave de
-    cifrado de secretos) para completar la acción pedida. No es un error del
-    cliente: hay que avisarle igual, porque de otro modo un guardado fallido
-    quedaría como un 500 sin explicación."""
-
-    status_code = 503
-    code = "backend_not_configured"

@@ -108,14 +108,6 @@ class Salon(Base):
     #: NULL = no-op, ver app/services/notifications.py. Nunca global: incluye
     #: nombre/teléfono de la clienta, no puede mandarse al webhook de otro salón.
     notifications_webhook_url: Mapped[str | None] = mapped_column(Text)
-    #: Seña para reservar un turno en este salón. NULL = usa el default global
-    #: del backend (Settings.booking_deposit_amount) como fallback, ver
-    #: app/services/payments.py.
-    booking_deposit_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
-    #: Access token de Mercado Pago (Checkout Pro) de este salón, cifrado con
-    #: Fernet antes de guardarse — nunca en texto plano. NULL = usa el default
-    #: global (Settings.mercadopago_access_token) o queda deshabilitado.
-    mercadopago_access_token_encrypted: Mapped[str | None] = mapped_column(Text)
     min_lead_minutes: Mapped[int] = mapped_column(Integer)
     max_advance_days: Mapped[int] = mapped_column(Integer)
     slot_step_minutes: Mapped[int] = mapped_column(Integer)

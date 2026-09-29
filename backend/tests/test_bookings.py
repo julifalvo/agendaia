@@ -75,13 +75,7 @@ class FakeSession:
 
 
 def make_salon(**overrides):
-    base = dict(
-        id=SALON_ID,
-        is_active=True,
-        name="MC Nails Studio",
-        booking_deposit_amount=None,
-        mercadopago_access_token_encrypted=None,
-    )
+    base = dict(id=SALON_ID, is_active=True, name="MC Nails Studio")
     base.update(overrides)
     return SimpleNamespace(**base)
 
@@ -680,7 +674,7 @@ async def test_mercadopago_crea_preferencia_y_deja_la_sena_pendiente(patched, mo
     async def assert_slot_bookable(session, **kwargs):
         return Interval(START, END)
 
-    async def fake_create_preference(appointment, description, **kwargs):
+    async def fake_create_preference(appointment, description):
         assert appointment.deposit_amount == Decimal("8500")
         assert "Manicura" in description
         return {"id": "pref-123", "init_point": "https://mercadopago.com/checkout/pref-123"}
@@ -717,7 +711,7 @@ async def test_mercadopago_si_falla_la_preferencia_el_turno_igual_queda_reservad
     async def assert_slot_bookable(session, **kwargs):
         return Interval(START, END)
 
-    async def fake_create_preference(appointment, description, **kwargs):
+    async def fake_create_preference(appointment, description):
         raise UpstreamError("Mercado Pago no responde")
 
     monkeypatch.setattr(availability, "eligible_staff_ids", eligible_staff_ids)
@@ -752,7 +746,7 @@ async def test_webhook_pago_aprobado_confirma_el_turno(patched, monkeypatch):
     session = FakeSession()
     session.get_map[(bookings.Appointment, appt.id)] = appt
 
-    async def fake_get_payment(payment_id, **kwargs):
+    async def fake_get_payment(payment_id):
         assert payment_id == "pay-1"
         return {"id": "pay-1", "status": "approved", "external_reference": str(appt.id)}
 
@@ -774,7 +768,7 @@ async def test_webhook_pago_rechazado_no_toca_el_turno(patched, monkeypatch):
     session = FakeSession()
     session.get_map[(bookings.Appointment, appt.id)] = appt
 
-    async def fake_get_payment(payment_id, **kwargs):
+    async def fake_get_payment(payment_id):
         return {"id": "pay-2", "status": "rejected", "external_reference": str(appt.id)}
 
     monkeypatch.setattr(payments, "get_payment", fake_get_payment)
@@ -798,7 +792,7 @@ async def test_webhook_es_idempotente_si_la_sena_ya_estaba_paga(patched, monkeyp
     session = FakeSession()
     session.get_map[(bookings.Appointment, appt.id)] = appt
 
-    async def fake_get_payment(payment_id, **kwargs):
+    async def fake_get_payment(payment_id):
         return {"id": "pay-3", "status": "approved", "external_reference": str(appt.id)}
 
     monkeypatch.setattr(payments, "get_payment", fake_get_payment)
@@ -813,7 +807,7 @@ async def test_webhook_es_idempotente_si_la_sena_ya_estaba_paga(patched, monkeyp
 async def test_webhook_turno_inexistente_no_rompe(patched, monkeypatch):
     session = FakeSession()
 
-    async def fake_get_payment(payment_id, **kwargs):
+    async def fake_get_payment(payment_id):
         return {"id": "pay-4", "status": "approved", "external_reference": str(uuid.uuid4())}
 
     monkeypatch.setattr(payments, "get_payment", fake_get_payment)

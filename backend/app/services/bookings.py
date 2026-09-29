@@ -24,6 +24,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.errors import (
     ConflictError,
     InvalidBookingWindow,
@@ -214,7 +215,7 @@ async def create_booking(
     staff_id, interval = await _resolve_staff(session, request, salon, service, now)
 
     deposit_amount = (
-        payments.resolve_deposit_amount(salon)
+        get_settings().booking_deposit_amount
         if request.payment_method is not None
         else None
     )
@@ -301,9 +302,7 @@ async def create_booking(
     if request.payment_method is PaymentMethod.mercadopago:
         try:
             preference = await payments.create_preference(
-                appointment,
-                description=f"Seña de turno — {service.name}",
-                access_token=payments.resolve_access_token(salon),
+                appointment, description=f"Seña de turno — {service.name}"
             )
         except (UpstreamError, MercadoPagoNotConfigured):
             logger.exception(
@@ -461,9 +460,7 @@ async def cancel_booking(
     )
 
 
-async def confirm_mercadopago_payment(
-    session: AsyncSession, payment_id: str, salon_id: uuid.UUID | None = None
-) -> None:
+async def confirm_mercadopago_payment(session: AsyncSession, payment_id: str) -> None:
     """Reconcilia una notificación de pago del webhook de Mercado Pago.
 
     Nunca confía en el cuerpo de la notificación: siempre vuelve a pedirle el
@@ -471,17 +468,9 @@ async def confirm_mercadopago_payment(
     tocar el turno. Es idempotente — un mismo `payment_id` notificado dos
     veces (reintentos de Mercado Pago) no dispara el aviso de confirmación
     dos veces ni rompe si el turno ya no está en 'pending'.
-
-    `salon_id` viene del query param que `create_preference` agrega a la
-    `notification_url` (necesario para saber CON QUÉ token de Mercado Pago
-    consultar el pago: recién se sabe a qué turno corresponde después de esa
-    consulta). `None` cae al token global del backend, por compatibilidad con
-    preferencias creadas antes de que existiera ese query param.
     """
-    salon = await session.get(Salon, salon_id) if salon_id is not None else None
-    access_token = payments.resolve_access_token(salon)
     try:
-        payment = await payments.get_payment(payment_id, access_token=access_token)
+        payment = await payments.get_payment(payment_id)
     except (UpstreamError, MercadoPagoNotConfigured):
         logger.warning("No se pudo verificar el pago %s en Mercado Pago", payment_id)
         return

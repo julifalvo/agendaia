@@ -25,8 +25,6 @@ from app.schemas.admin import (
     PublicStaffOut,
     SalonClosureCreate,
     SalonClosureOut,
-    SalonPaymentSettingsOut,
-    SalonPaymentSettingsUpdate,
     ScheduleBlockOut,
     ScheduleDateReplace,
     ServiceCreate,
@@ -436,29 +434,3 @@ async def delete_salon_closure(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     await admin.delete_salon_closure(session, profile.salon_id, closure_id)
-
-
-# --- Configuración de pagos (seña / Mercado Pago) ---------------------------
-
-
-@router.get("/salon/payment-settings", response_model=SalonPaymentSettingsOut)
-async def get_payment_settings(
-    profile: Profile = Depends(require_full_access),
-    session: AsyncSession = Depends(get_session),
-) -> SalonPaymentSettingsOut:
-    salon = await admin.get_payment_settings(session, profile.salon_id)
-    return SalonPaymentSettingsOut(**admin.payment_settings_out_fields(salon))
-
-
-@router.patch("/salon/payment-settings", response_model=SalonPaymentSettingsOut)
-async def update_payment_settings(
-    payload: SalonPaymentSettingsUpdate,
-    profile: Profile = Depends(require_full_access),
-    session: AsyncSession = Depends(get_session),
-) -> SalonPaymentSettingsOut:
-    """Owner (o los admins puntuales de `has_full_access`) puede cargar su
-    propio monto de seña y su propio token de Mercado Pago sin depender de
-    que alguien les toque una env var del backend — ver
-    `app.services.payments.resolve_access_token` / `resolve_deposit_amount`."""
-    salon = await admin.update_payment_settings(session, profile.salon_id, payload)
-    return SalonPaymentSettingsOut(**admin.payment_settings_out_fields(salon))

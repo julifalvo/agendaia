@@ -235,32 +235,3 @@ class SalonClosureOut(BaseModel):
     starts_at: dt.datetime
     ends_at: dt.datetime
     reason: str | None
-
-
-# --- Configuración de pagos (seña / Mercado Pago) ---------------------------
-
-
-class SalonPaymentSettingsUpdate(BaseModel):
-    """Actualización parcial: `None` en cualquier campo significa "no tocar".
-
-    Para `mercadopago_access_token`: mandar `""` (string vacío) borra el
-    token guardado (el salón vuelve a depender del default global del
-    backend, si existe); un string no vacío lo reemplaza; `None` lo deja como
-    está.
-    """
-
-    booking_deposit_amount: Decimal | None = Field(default=None, gt=0)
-    mercadopago_access_token: str | None = Field(default=None, max_length=500)
-
-
-class SalonPaymentSettingsOut(BaseModel):
-    #: Valor efectivo ya aplicado (el propio del salón, o el default global
-    #: del backend si el salón no configuró el suyo).
-    booking_deposit_amount: Decimal
-    #: No se devuelve el token en ningún momento, ni cifrado: solo si hay uno
-    #: cargado (propio de este salón o el default global del backend).
-    mercadopago_configured: bool
-    #: Distingue "tiene su propio token" de "depende del default global", así
-    #: el panel puede avisarle al owner si está compartiendo cuenta con otro
-    #: salón del mismo backend.
-    mercadopago_uses_salon_token: bool
