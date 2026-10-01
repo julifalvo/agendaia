@@ -116,6 +116,20 @@ class BookingOut(BaseModel):
     mp_init_point: str | None = None
 
 
+class PublicBookingOut(BaseModel):
+    """Lo que ve una clienta en el link público "ver mi turno" — a propósito
+    mucho más chico que `BookingOut`: nada de `notes` (anotaciones internas
+    del staff), `created_by`, ni datos de pago/contacto de otra persona."""
+
+    id: uuid.UUID
+    salon_name: str
+    service_name: str
+    staff_name: str
+    start_time: dt.datetime
+    end_time: dt.datetime
+    status: AppointmentStatus
+
+
 class ErrorOut(BaseModel):
     code: str
     message: str

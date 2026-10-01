@@ -6,6 +6,7 @@ import { PublicSite } from "./pages/PublicSite";
 import { PrivacyPolicy } from "./pages/PrivacyPolicy";
 import { TermsOfService } from "./pages/TermsOfService";
 import { SetPassword } from "./pages/SetPassword";
+import { MyBooking } from "./pages/MyBooking";
 import { AdminLayout, RequireFullAccess } from "./admin/AdminLayout";
 import { AdminMyBookings } from "./admin/AdminMyBookings";
 import { AdminCalendar } from "./admin/AdminCalendar";
@@ -24,6 +25,7 @@ export default function App() {
             <Route path="/privacidad" element={<PrivacyPolicy />} />
             <Route path="/terminos" element={<TermsOfService />} />
             <Route path="/set-password" element={<SetPassword />} />
+            <Route path="/mi-turno/:appointmentId" element={<MyBooking />} />
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminMyBookings />} />
               <Route path="calendar" element={<AdminCalendar />} />

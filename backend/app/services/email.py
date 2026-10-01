@@ -23,13 +23,20 @@ _TIMEOUT_SECONDS = 10.0
 
 
 async def send_booking_confirmation(
-    appointment: Appointment, service_name: str, salon_name: str
+    appointment: Appointment,
+    service_name: str,
+    salon_name: str,
+    booking_link: str | None = None,
 ) -> None:
     """Manda el mail con el turno adjunto al email del invitado, si lo dejó.
 
     No-op silencioso si no hay email o Resend no está configurado — no
     levanta excepción en ningún caso, se llama de forma "fire and forget"
     después de que la reserva ya está confirmada.
+
+    `booking_link` es el link público "ver mi turno" (ver
+    `services/booking_links.py`) — None si esa feature no está configurada,
+    en cuyo caso el mail sale igual, solo sin esa línea.
     """
     settings = get_settings()
     if not appointment.guest_email or not settings.resend_api_key:
@@ -37,6 +44,9 @@ async def send_booking_confirmation(
 
     ics = build_booking_ics(appointment, service_name, settings.resend_from_email, salon_name)
     greeting = f" {appointment.guest_name}" if appointment.guest_name else ""
+    link_html = (
+        f'<p><a href="{booking_link}">Ver mi turno</a></p>' if booking_link else ""
+    )
     body = {
         "from": f"{salon_name} <{settings.resend_from_email}>",
         "to": [appointment.guest_email],
@@ -45,6 +55,7 @@ async def send_booking_confirmation(
             f"<p>¡Hola{greeting}!</p>"
             f"<p>Confirmamos tu turno de <strong>{service_name}</strong>. "
             "Te adjuntamos el evento para que lo sumes a tu calendario.</p>"
+            f"{link_html}"
         ),
         "attachments": [
             {

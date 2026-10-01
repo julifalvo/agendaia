@@ -55,6 +55,13 @@ class Settings(BaseSettings):
     #: integración.
     internal_sync_token: str = ""
 
+    #: Secreto para firmar el link público "ver mi turno" (HMAC sobre el id
+    #: del turno) que viaja en el mail de confirmación — ver
+    #: app/services/booking_links.py. Propio y sin relación con
+    #: google_calendar_token_key: rotar uno no debe invalidar el otro. Vacío
+    #: = no se manda el link en el mail y el endpoint público rechaza todo.
+    booking_link_secret: str = ""
+
     #: Emails con visibilidad total de la agenda del salón (ven los turnos de
     #: todo el staff, no solo los propios), sin importar su rol. El resto de
     #: los perfiles con rol staff solo ve su propia agenda. Separados por

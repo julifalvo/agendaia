@@ -23,10 +23,11 @@ from app.schemas.booking import (
     BookingReschedule,
     BookingStatusUpdate,
     PaymentStatusUpdate,
+    PublicBookingOut,
     SalonPublicOut,
     SlotOut,
 )
-from app.services import availability, bookings
+from app.services import availability, booking_links, bookings
 from app.services.bookings import BookingRequest
 
 router = APIRouter(tags=["reservas"])
@@ -247,6 +248,32 @@ async def list_bookings(
         limit=limit,
     )
     return [BookingOut.model_validate(r) for r in rows]
+
+
+@router.get("/bookings/{appointment_id}/public", response_model=PublicBookingOut)
+async def get_public_booking(
+    appointment_id: uuid.UUID,
+    t: str,
+    session: AsyncSession = Depends(get_session),
+) -> PublicBookingOut:
+    """"Ver mi turno" sin sesión — el link que viaja en el mail de
+    confirmación (ver `services/booking_links.py`). `t` es el HMAC del id;
+    sin él no hay forma de pedir el turno de otra persona cambiando el id en
+    la URL. 404 (no 401/403) ante un token inválido, mismo criterio que
+    `_authorize_access`: no confirmarle a nadie que el id existe.
+    """
+    if not booking_links.verify_token(appointment_id, t):
+        raise ResourceNotFound("Turno inexistente", appointment_id=str(appointment_id))
+    public_booking = await bookings.get_public_booking(session, appointment_id)
+    return PublicBookingOut(
+        id=public_booking.id,
+        salon_name=public_booking.salon_name,
+        service_name=public_booking.service_name,
+        staff_name=public_booking.staff_name,
+        start_time=public_booking.start_time,
+        end_time=public_booking.end_time,
+        status=public_booking.status,
+    )
 
 
 @router.get("/bookings/{appointment_id}", response_model=BookingOut)

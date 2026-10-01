@@ -48,3 +48,5 @@ services:
         sync: false
       - key: INTERNAL_SYNC_TOKEN
         sync: false
+      - key: BOOKING_LINK_SECRET
+        sync: false

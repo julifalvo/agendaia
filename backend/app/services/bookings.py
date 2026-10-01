@@ -46,7 +46,14 @@ from app.db.models import (
     Salon,
     Service,
 )
-from app.services import availability, email, google_calendar, notifications, payments
+from app.services import (
+    availability,
+    booking_links,
+    email,
+    google_calendar,
+    notifications,
+    payments,
+)
 from app.services.availability import SlotTakenLocally
 from app.services.payments import MercadoPagoNotConfigured
 
@@ -287,7 +294,8 @@ async def create_booking(
     await session.refresh(appointment)
     await attach_client_name(session, appointment)
     await notifications.notify(session, "booking.created", appointment)
-    await email.send_booking_confirmation(appointment, service.name, salon.name)
+    booking_link = booking_links.build_url(appointment.id)
+    await email.send_booking_confirmation(appointment, service.name, salon.name, booking_link)
     staff_profile = await session.get(Profile, staff_id)
     if staff_profile is not None:
         await email.send_staff_notification(appointment, service.name, staff_profile, salon.name)
@@ -407,6 +415,42 @@ async def get_booking(
         raise ResourceNotFound("Turno inexistente", appointment_id=str(appointment_id))
     await attach_client_name(session, appointment)
     return appointment
+
+
+@dataclass
+class PublicBooking:
+    """Lo mínimo para pintar el link público "ver mi turno" — ver
+    `schemas.booking.PublicBookingOut`. Separado de `Appointment` para no
+    tentar a nadie a devolver el modelo completo (con `notes`, pagos, etc.)
+    por ese endpoint sin sesión."""
+
+    id: uuid.UUID
+    salon_name: str
+    service_name: str
+    staff_name: str
+    start_time: dt.datetime
+    end_time: dt.datetime
+    status: AppointmentStatus
+
+
+async def get_public_booking(
+    session: AsyncSession, appointment_id: uuid.UUID
+) -> PublicBooking:
+    appointment = await session.get(Appointment, appointment_id)
+    if appointment is None:
+        raise ResourceNotFound("Turno inexistente", appointment_id=str(appointment_id))
+    salon = await session.get(Salon, appointment.salon_id)
+    service = await session.get(Service, appointment.service_id)
+    staff = await session.get(Profile, appointment.staff_id)
+    return PublicBooking(
+        id=appointment.id,
+        salon_name=salon.name if salon else "",
+        service_name=service.name if service else "",
+        staff_name=staff.full_name if staff else "",
+        start_time=appointment.start_time,
+        end_time=appointment.end_time,
+        status=appointment.status,
+    )
 
 
 async def transition_status(
