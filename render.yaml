@@ -46,3 +46,5 @@ services:
         sync: false
       - key: GOOGLE_CALENDAR_TOKEN_KEY
         sync: false
+      - key: INTERNAL_SYNC_TOKEN
+        sync: false

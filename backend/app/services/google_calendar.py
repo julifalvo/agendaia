@@ -477,3 +477,21 @@ async def sync_incoming_events(
     connection.last_synced_at = dt.datetime.now(dt.UTC)
     await session.commit()
     return SyncResult(connected=True, upserted=upserted, pruned=pruned)
+
+
+async def sync_all_connections(session: AsyncSession) -> dict[uuid.UUID, SyncResult]:
+    """Sincroniza todos los salones con una conexión activa — llamado por el
+    cron externo (GitHub Actions, ver `routes/google_calendar.sync_all`) en
+    vez del botón "Sincronizar ahora" de un admin puntual. Mismo horizonte
+    que `sync_now` (hoy a 30 días): es la ventana que importa para bloquear
+    turnos futuros."""
+    now = dt.datetime.now(dt.UTC)
+    date_to = now + dt.timedelta(days=30)
+    salon_ids = (
+        await session.scalars(select(GoogleCalendarConnection.salon_id))
+    ).all()
+
+    results: dict[uuid.UUID, SyncResult] = {}
+    for salon_id in salon_ids:
+        results[salon_id] = await sync_incoming_events(session, salon_id, now, date_to)
+    return results

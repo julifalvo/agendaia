@@ -1,0 +1,30 @@
+name: Sync Google Calendar
+
+# Dispara la sincronización periódica de Google Calendar sin que nadie tenga
+# que abrir el panel de admin ni apretar "Sincronizar ahora". No hay job
+# runner propio en el backend (ver app/services/google_calendar.py), así que
+# este cron gratuito de GitHub Actions hace de reemplazo.
+#
+# Requiere dos secrets del repo (Settings -> Secrets and variables -> Actions):
+#   BACKEND_SYNC_URL      -> https://<tu-backend-en-render>/api/v1/admin/google-calendar/internal/sync-all
+#   INTERNAL_SYNC_TOKEN    -> el mismo valor que INTERNAL_SYNC_TOKEN en Render
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disparar sync-all
+        run: |
+          status=$(curl -s -o /tmp/response.json -w "%{http_code}" -X POST \
+            "${{ secrets.BACKEND_SYNC_URL }}" \
+            -H "X-Internal-Sync-Token: ${{ secrets.INTERNAL_SYNC_TOKEN }}")
+          echo "HTTP $status"
+          cat /tmp/response.json
+          if [ "$status" -ge 300 ]; then
+            exit 1
+          fi

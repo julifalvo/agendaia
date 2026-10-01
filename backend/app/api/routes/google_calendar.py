@@ -9,13 +9,15 @@ vez de con la sesión (ver `google_calendar.decode_state`).
 from __future__ import annotations
 
 import datetime as dt
+import hmac
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import has_full_access, require_roles
-from app.core.errors import BookingError
+from app.core.config import get_settings
+from app.core.errors import BookingError, NotAuthenticated
 from app.db.models import Profile, UserRole
 from app.db.session import get_session
 from app.schemas.google_calendar import (
@@ -137,3 +139,41 @@ async def list_blocks(
             out.summary = None
         result.append(out)
     return result
+
+
+def _require_internal_sync_token(
+    x_internal_sync_token: str | None = Header(default=None),
+) -> None:
+    """Guarda del cron externo (GitHub Actions) que reemplaza al botón
+    "Sincronizar ahora" — no hay sesión de admin acá, solo un secreto
+    compartido. `compare_digest` evita timing attacks; vacío en settings
+    deshabilita el endpoint entero (mismo criterio "vacío = deshabilitado"
+    que el resto de la integración), nunca lo deja abierto."""
+    expected = get_settings().internal_sync_token
+    if not expected or not x_internal_sync_token:
+        raise NotAuthenticated("Falta o no está configurado el token de sync interno")
+    if not hmac.compare_digest(x_internal_sync_token, expected):
+        raise NotAuthenticated("Token de sync interno inválido")
+
+
+@router.post(
+    "/internal/sync-all",
+    response_model=dict[str, GoogleCalendarSyncResultOut],
+    dependencies=[Depends(_require_internal_sync_token)],
+)
+async def sync_all(
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, GoogleCalendarSyncResultOut]:
+    """Dispara `sync_incoming_events` para todos los salones conectados.
+    Pensado para un cron externo (GitHub Actions, no hay job runner propio en
+    este proyecto) cada 15 min — ver .github/workflows/sync-google-calendar.yml."""
+    results = await google_calendar.sync_all_connections(session)
+    return {
+        str(salon_id): GoogleCalendarSyncResultOut(
+            connected=result.connected,
+            upserted=result.upserted,
+            pruned=result.pruned,
+            error=result.error,
+        )
+        for salon_id, result in results.items()
+    }

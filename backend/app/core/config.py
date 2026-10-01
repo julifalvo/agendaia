@@ -48,6 +48,12 @@ class Settings(BaseSettings):
     #: Clave Fernet (`Fernet.generate_key()`, 32 bytes url-safe base64) para
     #: cifrar el refresh_token antes de guardarlo. Vacía = feature deshabilitada.
     google_calendar_token_key: str = ""
+    #: Secreto compartido para disparar la sincronización periódica desde un
+    #: cron externo (GitHub Actions) sin sesión de admin — ver
+    #: POST /admin/google-calendar/internal/sync-all. Vacío = endpoint
+    #: deshabilitado (devuelve 503), mismo criterio que el resto de la
+    #: integración.
+    internal_sync_token: str = ""
 
     #: Emails con visibilidad total de la agenda del salón (ven los turnos de
     #: todo el staff, no solo los propios), sin importar su rol. El resto de
